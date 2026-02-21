@@ -1,0 +1,11 @@
+# Environments
+venv/
+env/
+
+# PyCharm specific
+.idea/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
