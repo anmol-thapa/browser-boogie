@@ -1,0 +1,117 @@
+.auth-card {
+  width: min(520px, 92vw);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #d6e0ed;
+  border-radius: 20px;
+  padding: 30px;
+  text-align: left;
+  box-shadow:
+    0 16px 42px rgba(15, 23, 42, 0.12),
+    0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+.auth-title {
+  margin: 0;
+  font-size: clamp(1.9rem, 4vw, 2.2rem);
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.auth-label {
+  font-weight: 600;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.auth-input {
+  height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0 13px;
+  font-size: 1rem;
+  background: #ffffff;
+  color: #0f172a;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auth-input:focus-visible {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.auth-submit {
+  margin-top: 10px;
+  height: 46px;
+  border: 1px solid #1d4ed8;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.26);
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.auth-submit:hover {
+  filter: brightness(0.99);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
+}
+
+.auth-submit:active {
+  transform: translateY(1px);
+}
+
+.auth-submit:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.auth-subtitle {
+  margin: 10px 0 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.auth-feedback {
+  margin: 6px 0 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.auth-feedback.error {
+  background: #fff3f3;
+  border: 1px solid #f3c2c2;
+  color: #8f2323;
+}
+
+.auth-feedback.success {
+  background: #edf9f0;
+  border: 1px solid #bfe3c6;
+  color: #236332;
+}
+
+.auth-switch {
+  margin: 14px 0 0;
+  color: #475569;
+}
+
+.auth-switch-link {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.auth-switch-link:hover {
+  text-decoration: underline;
+}

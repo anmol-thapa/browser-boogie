@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "sessionId": "0167b16b-b7cf-42db-8c30-826894c738a1",
+  "folderId": "dc279307ea7e3d83",
+  "updatedAt": "2026-02-22T07:36:29.781484+00:00",
+  "files": {
+    "loadZipFile": {
+      "name": "ssstik-io-jerseyyjoe-1771740934158-package.zip",
+      "kind": "binary",
+      "mime": "application/zip",
+      "size": 1646752
+    },
+    "createVideoFile": {
+      "name": "ssstik.io__jerseyyjoe_1771740934158.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1316187
+    },
+    "playAudioFile": {
+      "name": "ssstik.io__jerseyyjoe_1771740934158.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1316187
+    },
+    "loadWebcamVideoFile": {
+      "name": "ssstik.io__jerseyyjoe_1771740934158.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1316187
+    },
+    "generatedRoutine": {
+      "name": "generatedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 117449
+    },
+    "loadedRoutine": {
+      "name": "loadedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 117449
+    }
+  },
+  "values": {
+    "recordedWebcamLayout": "side-by-side"
+  }
+}

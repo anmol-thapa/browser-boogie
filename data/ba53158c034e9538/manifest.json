@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "sessionId": "3b1c714d-e6e9-4206-a9c7-dae21ae8cac8",
+  "folderId": "ba53158c034e9538",
+  "updatedAt": "2026-02-22T04:20:16.434281+00:00",
+  "files": {
+    "loadZipFile": {
+      "name": "babyboo-package.zip",
+      "kind": "binary",
+      "mime": "application/zip",
+      "size": 1657839
+    },
+    "createVideoFile": {
+      "name": "babyboo.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1161344
+    },
+    "playAudioFile": {
+      "name": "babyboo.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1161344
+    },
+    "loadWebcamVideoFile": {
+      "name": "babyboo.mp4",
+      "kind": "binary",
+      "mime": "video/mp4",
+      "size": 1161344
+    },
+    "generatedRoutine": {
+      "name": "generatedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 176335
+    },
+    "loadedRoutine": {
+      "name": "loadedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 176335
+    }
+  },
+  "values": {
+    "hideQuickSetup": true,
+    "recordedWebcamLayout": "side-by-side"
+  }
+}

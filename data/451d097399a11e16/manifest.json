@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "sessionId": "015be19a-6887-42ee-bec7-1c78c1bb06d9",
+  "folderId": "451d097399a11e16",
+  "updatedAt": "2026-02-22T05:30:34.600016+00:00",
+  "files": {
+    "recordAudioFile": {
+      "name": "she-gon-call-me-babyboo.mp3",
+      "kind": "binary",
+      "mime": "audio/mpeg",
+      "size": 403245
+    },
+    "playAudioFile": {
+      "name": "she-gon-call-me-babyboo.mp3",
+      "kind": "binary",
+      "mime": "audio/mpeg",
+      "size": 403245
+    },
+    "generatedRoutine": {
+      "name": "generatedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 101895
+    },
+    "loadedRoutine": {
+      "name": "loadedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 101895
+    }
+  },
+  "values": {
+    "recordedWebcamLayout": "raw"
+  }
+}
