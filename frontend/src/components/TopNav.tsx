@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
 
 type TopNavProps = {
-  showLogin?: boolean;
+  showAuthButtons?: boolean;
 };
 
-export default function TopNav({ showLogin = true }: TopNavProps) {
+export default function TopNav({ showAuthButtons = true }: TopNavProps) {
   return (
     <nav className="home-nav">
       <div className="home-brand-wrap">
@@ -17,10 +17,15 @@ export default function TopNav({ showLogin = true }: TopNavProps) {
           Just Dance
         </Link>
       </div>
-      {showLogin ? (
-        <Link to="/login" className="home-login">
-          Login
-        </Link>
+      {showAuthButtons ? (
+        <div className="home-auth-links">
+          <Link to="/login" className="home-login">
+            Login
+          </Link>
+          <Link to="/signup" className="home-signup">
+            Create Account
+          </Link>
+        </div>
       ) : null}
     </nav>
   );

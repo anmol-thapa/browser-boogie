@@ -5,7 +5,7 @@ import "./login.css";
 export default function LoginPage() {
   return (
     <div className="home">
-      <TopNav showLogin={false} />
+      <TopNav showAuthButtons={false} />
 
       <main className="home-main">
         <section className="login-card">

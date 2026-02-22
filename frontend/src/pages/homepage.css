@@ -56,6 +56,25 @@
   justify-content: center;
 }
 
+.home-auth-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-signup {
+  min-width: 140px;
+  border: 1px solid #8fa3c4;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #e9effa;
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .home-main {
   flex: 1;
   display: flex;
@@ -147,6 +166,17 @@
 }
 
 @media (max-width: 640px) {
+  .home-auth-links {
+    gap: 6px;
+  }
+
+  .home-login,
+  .home-signup {
+    min-width: auto;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+
   .home-actions {
     flex-direction: column;
     align-items: center;
