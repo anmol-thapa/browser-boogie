@@ -1,0 +1,55 @@
+.dash {
+  min-height: 100vh;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 2fr 1fr;
+  grid-template-areas:
+    "header header"
+    "camera stats"
+    "camera controls"
+    "audio controls";
+}
+
+.card {
+  background: #c300ff;
+  border: 1px solid #000000;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.header {
+  grid-area: header;
+}
+
+.camera {
+  grid-area: camera;
+  min-height: 420px;
+}
+
+.stats {
+  grid-area: stats;
+}
+
+.controls {
+  grid-area: controls;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio {
+  grid-area: audio;
+}
+
+@media (max-width: 900px) {
+  .dash {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "camera"
+      "stats"
+      "controls"
+      "audio";
+  }
+}

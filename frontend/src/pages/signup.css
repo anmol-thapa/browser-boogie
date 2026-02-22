@@ -1,0 +1,43 @@
+.signup-card {
+  width: min(520px, 92vw);
+  background: #ffffff;
+  border: 1px solid #cbd5e3;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+}
+
+.signup-title {
+  margin: 0 0 18px 0;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.signup-label {
+  font-weight: 600;
+  color: #24324a;
+}
+
+.signup-input {
+  height: 42px;
+  border: 1px solid #b8c5d8;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 1rem;
+}
+
+.signup-submit {
+  margin-top: 8px;
+  height: 44px;
+  border: 1px solid #91a2be;
+  border-radius: 10px;
+  background: #e7eef9;
+  font-size: 1rem;
+  font-weight: 700;
+}
