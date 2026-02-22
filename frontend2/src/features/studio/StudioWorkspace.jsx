@@ -1374,9 +1374,9 @@ function Dashboard({ onRecord, onBrowse, onFriendCode, userProfile, userStats, l
         <h2>Quick Start</h2>
         <p className="muted">Choose what you want to do.</p>
         <div className="dash-actions">
-          <button className="dash-big-btn" onClick={onRecord}>Record</button>
-          <button className="dash-big-btn" onClick={onBrowse}>Browse</button>
-          <button className="dash-big-btn" onClick={onFriendCode}>Friend Code</button>
+          <button className="dash-big-btn" onClick={onRecord}><span className="dash-big-btn-label">Record</span></button>
+          <button className="dash-big-btn" onClick={onBrowse}><span className="dash-big-btn-label">Browse</span></button>
+          <button className="dash-big-btn" onClick={onFriendCode}><span className="dash-big-btn-label">Friend Code</span></button>
         </div>
       </section>
 
