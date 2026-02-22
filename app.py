@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 ROOT_DIR = Path(__file__).resolve().parent
 DATA_DIR = ROOT_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+SELECTION_DIR = ROOT_DIR / "selection"
+SELECTION_DIR.mkdir(parents=True, exist_ok=True)
 LIBRARIES_DIR = DATA_DIR / "libraries"
 LIBRARIES_DIR.mkdir(parents=True, exist_ok=True)
 SHARE_INDEX_PATH = DATA_DIR / "share_index.json"
@@ -22,11 +24,16 @@ STATS_INDEX_PATH = DATA_DIR / "stats_index.json"
 FOLDER_INDEX_PATH = DATA_DIR / "folder_index.json"
 
 _FOLDER_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{6,64}$")
+_SELECTION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,80}$")
 _SHARE_CODE_RE = re.compile(r"^[A-Z0-9]{6,16}$")
 _USER_ID_RE = re.compile(r"^[a-zA-Z0-9._:@-]{2,128}$")
 _SHARE_LOCK = threading.Lock()
 _STATS_LOCK = threading.Lock()
 _FOLDER_LOCK = threading.Lock()
+
+_AUDIO_FILE_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".aac", ".flac"}
+_VIDEO_FILE_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+_MEDIA_FILE_EXTS = _AUDIO_FILE_EXTS | _VIDEO_FILE_EXTS
 
 
 def now_iso() -> str:
@@ -44,6 +51,15 @@ def normalize_folder_id(folder_id: str | None) -> str | None:
     if not value:
         return None
     if not _FOLDER_ID_RE.fullmatch(value):
+        return None
+    return value
+
+
+def normalize_selection_id(selection_id: str | None) -> str | None:
+    value = (selection_id or "").strip()
+    if not value:
+        return None
+    if not _SELECTION_ID_RE.fullmatch(value):
         return None
     return value
 
@@ -303,6 +319,252 @@ def send_json(handler: SimpleHTTPRequestHandler, status: int, payload: dict) -> 
 class LocalStorageHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT_DIR), **kwargs)
+
+    def _read_selection_manifest(self, selection_path: Path) -> dict:
+        manifest_path = selection_path / "manifest.json"
+        if not manifest_path.exists():
+            return {}
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+
+    def _selection_file_by_manifest(self, selection_path: Path, manifest: dict, key: str) -> Path | None:
+        raw = str(manifest.get(key) or "").strip()
+        if not raw:
+            return None
+        name = sanitize_name(raw)
+        file_path = selection_path / name
+        if file_path.exists() and file_path.is_file():
+            return file_path
+        return None
+
+    def _selection_detect_files(self, selection_path: Path, manifest: dict) -> dict:
+        files = [p for p in selection_path.iterdir() if p.is_file()]
+        by_name = {p.name.lower(): p for p in files}
+        candidate_json = [
+            p for p in files
+            if p.suffix.lower() == ".json" and p.name.lower() != "manifest.json"
+        ]
+
+        routine_file = self._selection_file_by_manifest(selection_path, manifest, "routineFile")
+        if routine_file is None:
+            routine_file = by_name.get("routine.json")
+        if routine_file is None and candidate_json:
+            routine_file = candidate_json[0]
+
+        audio_file = self._selection_file_by_manifest(selection_path, manifest, "audioFile")
+        video_file = self._selection_file_by_manifest(selection_path, manifest, "videoFile")
+        webcam_file = self._selection_file_by_manifest(selection_path, manifest, "webcamFile")
+        package_file = (
+            self._selection_file_by_manifest(selection_path, manifest, "packageZipFile")
+            or self._selection_file_by_manifest(selection_path, manifest, "packageFile")
+        )
+        preview_file = self._selection_file_by_manifest(selection_path, manifest, "previewFile")
+        thumbnail_file = self._selection_file_by_manifest(selection_path, manifest, "thumbnailFile")
+
+        if package_file is None:
+            package_file = next((p for p in files if p.suffix.lower() == ".zip"), None)
+
+        if audio_file is None and video_file is None:
+            media_candidate = next(
+                (
+                    p for p in files
+                    if p.suffix.lower() in _MEDIA_FILE_EXTS
+                    and p != webcam_file
+                ),
+                None,
+            )
+            if media_candidate is not None:
+                if media_candidate.suffix.lower() in _AUDIO_FILE_EXTS:
+                    audio_file = media_candidate
+                else:
+                    video_file = media_candidate
+
+        if webcam_file is None:
+            webcam_file = next(
+                (
+                    p for p in files
+                    if p.suffix.lower() in _VIDEO_FILE_EXTS
+                    and p not in {video_file}
+                    and any(token in p.name.lower() for token in ("webcam", "camera", "reference", "ghost"))
+                ),
+                None,
+            )
+
+        if preview_file is None:
+            preview_file = video_file or webcam_file
+
+        return {
+            "routine": routine_file,
+            "audio": audio_file,
+            "video": video_file,
+            "webcam": webcam_file,
+            "package": package_file,
+            "preview": preview_file,
+            "thumbnail": thumbnail_file,
+        }
+
+    def _selection_file_url(self, selection_id: str, file_name: str) -> str:
+        safe_file = sanitize_name(file_name)
+        return f"/api/selection/file/{selection_id}/{quote(safe_file)}"
+
+    def _selection_list_request(self) -> None:
+        items: list[dict] = []
+        for child in sorted(SELECTION_DIR.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir():
+                continue
+            selection_id = normalize_selection_id(child.name)
+            if selection_id is None:
+                continue
+
+            manifest = self._read_selection_manifest(child)
+            detected = self._selection_detect_files(child, manifest)
+            routine_file = detected.get("routine")
+            media_file = detected.get("audio") or detected.get("video")
+            if routine_file is None or media_file is None:
+                continue
+
+            title = str(manifest.get("title") or selection_id.replace("_", " ").replace("-", " ").title())
+            description = str(manifest.get("description") or "")
+            category = str(manifest.get("category") or "General")
+            tags_raw = manifest.get("tags")
+            tags = [str(tag).strip() for tag in tags_raw if str(tag).strip()] if isinstance(tags_raw, list) else []
+
+            duration_sec = 0.0
+            try:
+                duration_sec = max(0.0, float(manifest.get("durationSec") or 0.0))
+            except (TypeError, ValueError):
+                duration_sec = 0.0
+
+            preview_path = detected.get("preview")
+            thumbnail_path = detected.get("thumbnail")
+            package_path = detected.get("package")
+
+            items.append(
+                {
+                    "id": selection_id,
+                    "title": title,
+                    "description": description,
+                    "category": category,
+                    "tags": tags,
+                    "durationSec": round(duration_sec, 2),
+                    "hasWebcamVideo": bool(detected.get("webcam")),
+                    "mediaFileName": media_file.name,
+                    "packageZipFileName": package_path.name if package_path else "",
+                    "previewUrl": self._selection_file_url(selection_id, preview_path.name) if preview_path else "",
+                    "thumbnailUrl": self._selection_file_url(selection_id, thumbnail_path.name) if thumbnail_path else "",
+                }
+            )
+
+        send_json(self, 200, {"ok": True, "items": items})
+
+    def _selection_load_request(self, selection_id: str) -> None:
+        normalized = normalize_selection_id(selection_id)
+        if normalized is None:
+            send_json(self, 404, {"ok": False, "error": "selection not found"})
+            return
+
+        selection_path = SELECTION_DIR / normalized
+        if not selection_path.exists() or not selection_path.is_dir():
+            send_json(self, 404, {"ok": False, "error": "selection not found"})
+            return
+
+        manifest = self._read_selection_manifest(selection_path)
+        detected = self._selection_detect_files(selection_path, manifest)
+        routine_file = detected.get("routine")
+        media_file = detected.get("audio") or detected.get("video")
+
+        if routine_file is None:
+            send_json(self, 400, {"ok": False, "error": "selection missing routine json"})
+            return
+        if media_file is None:
+            send_json(self, 400, {"ok": False, "error": "selection missing audio/video source"})
+            return
+
+        media_mime = mimetypes.guess_type(str(media_file))[0] or "application/octet-stream"
+        package_file = detected.get("package")
+        webcam_file = detected.get("webcam")
+        webcam_layout = str(manifest.get("webcamLayout") or ("side-by-side" if webcam_file else "raw"))
+
+        files: dict[str, dict] = {
+            "loadedRoutine": {
+                "name": routine_file.name,
+                "kind": "json",
+                "mime": "application/json",
+                "url": self._selection_file_url(normalized, routine_file.name),
+            },
+            "playAudioFile": {
+                "name": media_file.name,
+                "kind": "binary",
+                "mime": media_mime,
+                "url": self._selection_file_url(normalized, media_file.name),
+            },
+        }
+
+        if package_file is not None:
+            package_mime = mimetypes.guess_type(str(package_file))[0] or "application/zip"
+            files["loadZipFile"] = {
+                "name": package_file.name,
+                "kind": "binary",
+                "mime": package_mime,
+                "url": self._selection_file_url(normalized, package_file.name),
+            }
+
+        if webcam_file is not None:
+            webcam_mime = mimetypes.guess_type(str(webcam_file))[0] or "video/mp4"
+            files["loadWebcamVideoFile"] = {
+                "name": webcam_file.name,
+                "kind": "binary",
+                "mime": webcam_mime,
+                "url": self._selection_file_url(normalized, webcam_file.name),
+            }
+
+        payload = {
+            "ok": True,
+            "folderId": normalized,
+            "userId": "",
+            "manifest": {
+                "version": 1,
+                "sessionId": "",
+                "source": "selection",
+                "selectionId": normalized,
+                "files": files,
+                "values": {
+                    "recordedWebcamLayout": webcam_layout,
+                },
+            },
+            "missingFiles": [],
+        }
+        send_json(self, 200, payload)
+
+    def _selection_file_request(self, selection_id: str, file_name: str) -> None:
+        normalized = normalize_selection_id(selection_id)
+        if normalized is None:
+            self.send_error(404)
+            return
+
+        selection_path = SELECTION_DIR / normalized
+        if not selection_path.exists() or not selection_path.is_dir():
+            self.send_error(404)
+            return
+
+        decoded_name = sanitize_name(unquote(file_name))
+        file_path = selection_path / decoded_name
+        if not file_path.exists() or not file_path.is_file():
+            self.send_error(404)
+            return
+
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        data = file_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", mime_type or "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _save_request(self) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -705,6 +967,24 @@ class LocalStorageHandler(SimpleHTTPRequestHandler):
             send_json(self, 200, {"ok": True, "time": now_iso()})
             return
 
+        if parsed.path == "/api/selection/list":
+            self._selection_list_request()
+            return
+
+        if parsed.path.startswith("/api/selection/load/"):
+            selection_id = parsed.path.removeprefix("/api/selection/load/")
+            self._selection_load_request(selection_id)
+            return
+
+        if parsed.path.startswith("/api/selection/file/"):
+            remainder = parsed.path.removeprefix("/api/selection/file/")
+            parts = remainder.split("/", 1)
+            if len(parts) != 2:
+                self.send_error(404)
+                return
+            self._selection_file_request(parts[0], parts[1])
+            return
+
         if parsed.path == "/api/stats/summary":
             query = parse_qs(parsed.query or "")
             user_id = (query.get("userId") or [""])[0]
@@ -750,6 +1030,7 @@ class LocalStorageHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 8000), LocalStorageHandler)
     print("Serving JustDance app on http://127.0.0.1:8000")
+    print("Selection API enabled at /api/selection/*")
     print("Storage API enabled at /api/storage/*")
     print("Share API enabled at /api/share/*")
     print("Stats API enabled at /api/stats/*")

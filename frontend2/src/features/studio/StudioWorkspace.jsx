@@ -710,6 +710,40 @@ async function createShareCode(folderId, sessionId, userId) {
   return payload;
 }
 
+async function fetchBrowseSelections() {
+  const response = await fetch("/api/selection/list");
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405 || response.status === 501) {
+      throw new Error("Browse API unavailable. Restart backend with `python app.py`.");
+    }
+    throw new Error(`browse list failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+async function loadBrowseSelection(selectionId) {
+  const normalized = String(selectionId || "").trim();
+  if (!normalized) {
+    throw new Error("Selection is missing an id.");
+  }
+  const response = await fetch(`/api/selection/load/${encodeURIComponent(normalized)}`);
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Selection was not found.");
+    }
+    if (response.status === 400) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error || "Selection is missing required files.");
+    }
+    if (response.status === 405 || response.status === 501) {
+      throw new Error("Browse API unavailable. Restart backend with `python app.py`.");
+    }
+    throw new Error(`browse load failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 function isShareableSession(session) {
   if (!session) return false;
   return session.mode === "load-routine" || session.status === "ready" || session.status === "completed";
@@ -785,7 +819,7 @@ function describeSessionConfig(session) {
     return `Audio: ${session.config.audioFileName || "none"} | ${webcam}`;
   }
   if (session.mode === "load-routine") {
-    const base = `Play Package: ${session.config.packageZipFileName} (needs routine.json + audio)`;
+    const base = `Play Package: ${session.config.packageZipFileName}`;
     if (session.config?.shareCode) {
       return `${base} | Share: ${session.config.shareCode}`;
     }
@@ -812,6 +846,10 @@ function StudioWorkspace({ onLogout }) {
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
+  const [browseSelections, setBrowseSelections] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState("");
+  const [browseBusyId, setBrowseBusyId] = useState("");
   const persistTimersRef = useRef({});
   const storageWarningShownRef = useRef(false);
   const folderIdBySessionRef = useRef({});
@@ -876,6 +914,12 @@ function StudioWorkspace({ onLogout }) {
       cancelled = true;
     };
   }, [userProfile.userId]);
+
+  useEffect(() => {
+    if (mainTab !== "browse") return;
+    if (browseSelections.length > 0) return;
+    refreshBrowseSelections(false);
+  }, [mainTab, browseSelections.length]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) || null,
@@ -954,6 +998,86 @@ function StudioWorkspace({ onLogout }) {
     }
     setStatsError("");
     return payload;
+  }
+
+  async function refreshBrowseSelections(force = false) {
+    if (browseLoading) return;
+    if (!force && browseSelections.length > 0) return;
+    setBrowseLoading(true);
+    setBrowseError("");
+    try {
+      const items = await fetchBrowseSelections();
+      setBrowseSelections(items);
+    } catch (err) {
+      console.error("Browse selection load failed:", err);
+      setBrowseSelections([]);
+      setBrowseError(err?.message || "Unable to load browse presets.");
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function openBrowseSelectionInStudio(selection) {
+    const selectionId = String(selection?.id || "").trim();
+    if (!selectionId) {
+      setBrowseError("Selection id is missing.");
+      return;
+    }
+
+    setBrowseBusyId(selectionId);
+    setBrowseError("");
+    try {
+      const payload = await loadBrowseSelection(selectionId);
+      const decoded = await decodeStoragePayloadToBundle(payload);
+      const bundle = decoded?.bundle;
+      if (!bundle) {
+        throw new Error("Selection bundle is empty.");
+      }
+
+      const derived = deriveSessionConfigFromBundle(bundle);
+      const title =
+        String(selection?.title || "").trim() ||
+        String(derived?.title || "").trim() ||
+        "Browse Selection";
+      const packageZipFileName =
+        bundle.loadZipFile?.name ||
+        String(selection?.packageZipFileName || "").trim() ||
+        String(derived?.config?.packageZipFileName || "").trim() ||
+        `${safeRoutineName(title)}-package.zip`;
+
+      const session = buildSessionFromDraft({
+        title,
+        mode: "load-routine",
+        recordAudioFileName: "",
+        recordIncludeWebcamVideo: false,
+        recordWebcamLayout: "raw",
+        loadZipFileName: packageZipFileName,
+        createVideoFileName: "",
+      });
+      session.status = "ready";
+      session.countdownSec = null;
+      session.config = mergeSessionConfig(session.config, {
+        ...derived.config,
+        packageZipFileName,
+        source: "selection",
+        selectionId,
+        selectionCategory: String(selection?.category || ""),
+      });
+
+      addSessionAndOpen(session, {
+        ...bundle,
+        __hydrated: true,
+      });
+
+      if (decoded.missingKeys?.length) {
+        window.alert(`Some preset files are missing: ${decoded.missingKeys.join(", ")}`);
+      }
+    } catch (err) {
+      console.error("Open browse selection failed:", err);
+      setBrowseError(err?.message || "Unable to open selection.");
+    } finally {
+      setBrowseBusyId("");
+    }
   }
 
   function openImportModal(initialMode = "load-package") {
@@ -1304,6 +1428,16 @@ function StudioWorkspace({ onLogout }) {
                 Dashboard
               </a>
               <a
+                href="#browse"
+                className={mainTab === "browse" ? "tab-link active" : "tab-link"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setMainTab("browse");
+                }}
+              >
+                Browse
+              </a>
+              <a
                 href="#library"
                 className={mainTab === "library" ? "tab-link active" : "tab-link"}
                 onClick={(event) => {
@@ -1325,13 +1459,24 @@ function StudioWorkspace({ onLogout }) {
         {mainTab === "dashboard" && (
           <Dashboard
             onRecord={startRecordSession}
-            onBrowse={() => setMainTab("library")}
+            onBrowse={() => setMainTab("browse")}
             onFriendCode={() => openImportModal("friend-code")}
             userProfile={userProfile}
             userStats={userStats}
             leaderboardRows={leaderboardRows}
             statsLoading={statsLoading}
             statsError={statsError}
+          />
+        )}
+
+        {mainTab === "browse" && (
+          <BrowseSelections
+            items={browseSelections}
+            loading={browseLoading}
+            error={browseError}
+            busyId={browseBusyId}
+            onReload={() => refreshBrowseSelections(true)}
+            onOpenSelection={openBrowseSelectionInStudio}
           />
         )}
 
@@ -1372,7 +1517,7 @@ function Dashboard({ onRecord, onBrowse, onFriendCode, userProfile, userStats, l
     <div className="dashboard-stack">
       <section className="dashboard-clean quick-start-panel">
         <h2>Quick Start</h2>
-        <p className="muted">Choose what you want to do.</p>
+        <p className="muted">Record a video, browse a selection of videos, or try a friend's dance!</p>
         <div className="dash-actions">
           <button className="dash-big-btn dash-big-btn--record" onClick={onRecord}><span className="dash-big-btn-label">Record</span></button>
           <button className="dash-big-btn dash-big-btn--browse" onClick={onBrowse}><span className="dash-big-btn-label">Browse</span></button>
@@ -1440,6 +1585,69 @@ function Dashboard({ onRecord, onBrowse, onFriendCode, userProfile, userStats, l
         </div>
       </section>
     </div>
+  );
+}
+
+function BrowseSelections({ items, loading, error, busyId, onReload, onOpenSelection }) {
+  return (
+    <section className="library-wrap browse-wrap">
+      <div className="section-head">
+        <div>
+          <h2>Browse Presets</h2>
+          <p className="muted">Pick preloaded routines from `selection/` and open them directly in Studio.</p>
+        </div>
+        <div className="top-actions">
+          <button className="btn" onClick={onReload} disabled={loading}>
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="meta-line browse-error">{error}</p>}
+      {!loading && !error && items.length === 0 && (
+        <p className="muted">
+          No presets found. Add folders under `selection/` with at least `routine.json` and an audio/video file.
+        </p>
+      )}
+
+      <div className="library-list browse-grid">
+        {items.map((item) => {
+          const selectionId = String(item?.id || "");
+          const isBusy = busyId === selectionId;
+          const tags = Array.isArray(item?.tags) ? item.tags.filter(Boolean) : [];
+          return (
+            <article key={selectionId} className="session-card browse-card">
+              <div className="browse-card-main">
+                <h3>{item?.title || selectionId}</h3>
+                <p className="muted">{item?.category || "General"}</p>
+                {item?.description && <p className="meta-line">{item.description}</p>}
+                <p className="meta-line">
+                  Source: {item?.mediaFileName || "Unknown"}{" "}
+                  {Number(item?.durationSec) > 0 ? `| ${(Number(item.durationSec) || 0).toFixed(1)}s` : ""}
+                </p>
+                <p className="meta-line">
+                  Webcam Reference: {item?.hasWebcamVideo ? "Included" : "Not included"}
+                </p>
+                {tags.length > 0 && (
+                  <div className="browse-tags">
+                    {tags.map((tag) => (
+                      <span key={`${selectionId}-${tag}`} className="browse-tag">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="session-actions">
+                <button className="btn btn-primary" onClick={() => onOpenSelection(item)} disabled={isBusy}>
+                  {isBusy ? "Opening..." : "Open In Studio"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

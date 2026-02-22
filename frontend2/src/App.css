@@ -598,6 +598,46 @@ h3 {
   gap: 10px;
 }
 
+.browse-wrap .section-head {
+  align-items: flex-start;
+}
+
+.browse-grid {
+  gap: 12px;
+}
+
+.browse-card {
+  align-items: flex-start;
+}
+
+.browse-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.browse-tags {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.browse-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 0.75rem;
+}
+
+.browse-error {
+  color: #b91c1c;
+}
+
 .session-card {
   padding: 14px;
   display: flex;
@@ -1396,6 +1436,7 @@ h3 {
   .stage-overlay,
   .play-info-chip,
   .step-chip,
+  .browse-tag,
   .grade-badge,
   .fake-stage,
   .btn,
@@ -1417,8 +1458,7 @@ h3 {
   background: var(--guide-wood-main) !important;
 }
 
-.tabs,
-.app-root:not(.app-root-play) .topbar-home .tabs {
+.tabs {
   background: var(--guide-wood-soft) !important;
   box-shadow: var(--shadow-sm) !important;
 }
@@ -1539,6 +1579,11 @@ h3 {
 .step-chip {
   background: #f3ddc3 !important;
   color: var(--guide-ink-soft) !important;
+}
+
+.browse-tag {
+  background: #f3ddc3 !important;
+  color: #000000 !important;
 }
 
 .step-chip.active {
