@@ -1,28 +1,5 @@
-import { Link } from "react-router-dom";
-import "./homepage.css";
+import PlaceholderPage from "../components/PlaceholderPage";
 
 export default function EnterCodePage() {
-  return (
-    <div className="home">
-      <nav className="home-nav">
-        <div className="home-brand-wrap">
-          <Link to="/" className="home-logo-link" aria-label="Go to landing page">
-            <div className="home-logo-slot" aria-hidden="true">
-              Logo
-            </div>
-          </Link>
-          <Link to="/" className="home-brand-link">
-            Just Dance
-          </Link>
-        </div>
-        <Link to="/login" className="home-login">
-          Login
-        </Link>
-      </nav>
-
-      <main className="home-main">
-        <h1 className="home-title">enter a code</h1>
-      </main>
-    </div>
-  );
+  return <PlaceholderPage title="enter a code" />;
 }

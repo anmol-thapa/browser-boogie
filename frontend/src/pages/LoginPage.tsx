@@ -1,25 +1,11 @@
-import { Link } from "react-router-dom";
+import TopNav from "../components/TopNav";
 import "./homepage.css";
 import "./login.css";
 
 export default function LoginPage() {
   return (
     <div className="home">
-      <nav className="home-nav">
-        <div className="home-brand-wrap">
-          <Link to="/" className="home-logo-link" aria-label="Go to landing page">
-            <div className="home-logo-slot" aria-hidden="true">
-              Logo
-            </div>
-          </Link>
-          <Link to="/" className="home-brand-link">
-            Just Dance
-          </Link>
-        </div>
-        <Link to="/login" className="home-login">
-          Login
-        </Link>
-      </nav>
+      <TopNav showLogin={false} />
 
       <main className="home-main">
         <section className="login-card">
