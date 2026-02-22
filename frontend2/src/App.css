@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Mojangles";
+  src: url("/fonts/mojangles.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #f3f6fb;
   --surface: #ffffff;
@@ -39,7 +47,7 @@ body {
     radial-gradient(900px 520px at 100% -20%, rgba(125, 211, 252, 0.1), transparent 58%),
     var(--bg);
   color: var(--text);
-  font-family: "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Mojangles", "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
 }
 
 .app-root {
@@ -116,7 +124,7 @@ body {
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  background: var(--grad-surface);
+  background: #c8a27a;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
@@ -267,6 +275,15 @@ h3 {
 
 .app-root:not(.app-root-play) .topbar-home .btn {
   margin-left: 2px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .panel-grid {
@@ -365,6 +382,18 @@ h3 {
   margin-bottom: 6px;
 }
 
+.quick-start-panel {
+  border: 4px solid #000000;
+  border-radius: 0;
+  background: #c8a27a;
+}
+
+.app-root:not(.app-root-play) .quick-start-panel {
+  border: 4px solid #000000;
+  border-radius: 0;
+  background: #c8a27a;
+}
+
 .dashboard-stack {
   display: grid;
   gap: 16px;
@@ -381,8 +410,8 @@ h3 {
 
 .dash-big-btn {
   --stack-base-bg: #7c3aed;
-  --stack-mid-bg: #facc15;
-  --stack-top-bg: #22c55e;
+  --stack-mid-bg: #a78bfa;
+  --stack-top-bg: #c4b5fd;
   --stack-border: #000000;
   border: 4px solid var(--stack-border);
   border-radius: 0;
@@ -404,10 +433,30 @@ h3 {
   transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
+.dash-big-btn--record {
+  --stack-base-bg: #7c3aed;
+  --stack-mid-bg: #8650ef;
+  --stack-top-bg: #9063f1;
+}
+
+.dash-big-btn--browse {
+  --stack-base-bg: #65a30d;
+  --stack-mid-bg: #77b91a;
+  --stack-top-bg: #8ecf32;
+}
+
+.dash-big-btn--friend {
+  --stack-base-bg: #c2410c;
+  --stack-mid-bg: #f97316;
+  --stack-top-bg: #fb923c;
+}
+
 .dash-big-btn-label {
   display: inline-block;
   position: relative;
   z-index: 2;
+  color: #000000;
+  font-family: "Mojangles", "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
   transition: transform 0.22s ease;
 }
 
@@ -1307,4 +1356,78 @@ h3 {
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Hard-edge + bold outline treatment for remaining UI surfaces */
+.app-root :where(
+  .topbar,
+  .tabs,
+  .tab-link,
+  .dashboard-clean,
+  .stats-item,
+  .leaderboard-list,
+  .leaderboard-row,
+  .panel,
+  .list-card,
+  .recent-row,
+  .session-card,
+  .studio-card,
+  .studio-canvas,
+  .studio-state,
+  .share-code-box,
+  .floating-play-dock,
+  .stage-overlay,
+  .play-info-chip,
+  .step-chip,
+  .btn,
+  button,
+  input,
+  select,
+  textarea
+) {
+  border-radius: 0 !important;
+}
+
+.app-root :where(
+  .topbar,
+  .tab-link,
+  .dashboard-clean,
+  .stats-item,
+  .leaderboard-list,
+  .leaderboard-row,
+  .panel,
+  .list-card,
+  .recent-row,
+  .session-card,
+  .studio-card,
+  .studio-canvas,
+  .studio-state,
+  .share-code-box,
+  .floating-play-dock,
+  .stage-overlay,
+  .play-info-chip,
+  .step-chip,
+  .btn,
+  button,
+  input,
+  select,
+  textarea
+) {
+  border-style: solid !important;
+  border-width: 4px !important;
+  border-color: #000000 !important;
+}
+
+/* Keep stats table lines thinner than the global heavy outline */
+.app-root .stats-clean .leaderboard-list {
+  border-width: 4px !important;
+}
+
+.app-root .stats-clean .leaderboard-row {
+  border: 0 !important;
+  border-top: 4px solid #000000 !important;
+}
+
+.app-root .stats-clean .leaderboard-row:first-child {
+  border-top: 0 !important;
 }

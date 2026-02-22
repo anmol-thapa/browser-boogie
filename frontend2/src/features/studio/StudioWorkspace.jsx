@@ -1370,13 +1370,13 @@ function Dashboard({ onRecord, onBrowse, onFriendCode, userProfile, userStats, l
   const hasStats = Number(userStats?.runs || 0) > 0;
   return (
     <div className="dashboard-stack">
-      <section className="dashboard-clean">
+      <section className="dashboard-clean quick-start-panel">
         <h2>Quick Start</h2>
         <p className="muted">Choose what you want to do.</p>
         <div className="dash-actions">
-          <button className="dash-big-btn" onClick={onRecord}><span className="dash-big-btn-label">Record</span></button>
-          <button className="dash-big-btn" onClick={onBrowse}><span className="dash-big-btn-label">Browse</span></button>
-          <button className="dash-big-btn" onClick={onFriendCode}><span className="dash-big-btn-label">Friend Code</span></button>
+          <button className="dash-big-btn dash-big-btn--record" onClick={onRecord}><span className="dash-big-btn-label">Record</span></button>
+          <button className="dash-big-btn dash-big-btn--browse" onClick={onBrowse}><span className="dash-big-btn-label">Browse</span></button>
+          <button className="dash-big-btn dash-big-btn--friend" onClick={onFriendCode}><span className="dash-big-btn-label">Friend Code</span></button>
         </div>
       </section>
 
