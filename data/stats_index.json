@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "users": {
+    "c08c8fa2-86e6-4e8e-8209-490b04e84e61": {
+      "userId": "c08c8fa2-86e6-4e8e-8209-490b04e84e61",
+      "displayName": "abc",
+      "runs": [
+        {
+          "id": "6e489598badb",
+          "sessionId": "0167b16b-b7cf-42db-8c30-826894c738a1",
+          "sessionTitle": "ssstik.io_@jerseyyjoe_1771740934158",
+          "averageScore": 55.0,
+          "bestScore": 64.9,
+          "samples": 48,
+          "durationSec": 9.94,
+          "grade": "F",
+          "source": "play",
+          "endedAt": "2026-02-22T07:36:45.169812+00:00"
+        },
+        {
+          "id": "d0d4e104a24b",
+          "sessionId": "0167b16b-b7cf-42db-8c30-826894c738a1",
+          "sessionTitle": "ssstik.io_@jerseyyjoe_1771740934158",
+          "averageScore": 53.8,
+          "bestScore": 69.6,
+          "samples": 49,
+          "durationSec": 9.94,
+          "grade": "F",
+          "source": "play",
+          "endedAt": "2026-02-22T07:37:07.863470+00:00"
+        },
+        {
+          "id": "5d3e3798fa79",
+          "sessionId": "9d212280-9bce-4041-bc86-810bf1b46eca",
+          "sessionTitle": "Jumping around",
+          "averageScore": 55.3,
+          "bestScore": 67.8,
+          "samples": 48,
+          "durationSec": 9.94,
+          "grade": "F",
+          "source": "play",
+          "endedAt": "2026-02-22T07:45:32.051870+00:00"
+        }
+      ],
+      "totalRuns": 3,
+      "sumAverage": 164.1,
+      "bestScore": 69.6,
+      "lastRunAt": "2026-02-22T07:45:32.051870+00:00"
+    }
+  }
+}
