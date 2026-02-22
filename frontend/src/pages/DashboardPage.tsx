@@ -1,41 +1,58 @@
-import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import TopNav from "../components/TopNav";
+import { clearSession } from "../lib/supabaseClient";
+import "./homepage.css";
 import "./dashboard.css";
 
-type Judgement = "Perfect" | "Good" | "Ok" | "Miss";
-
 export default function DashboardPage() {
-  const [score] = useState(0);
-  const [combo] = useState(0);
-  const [label] = useState<Judgement>("Miss");
-  const [time] = useState(0);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    clearSession();
+    navigate("/login");
+  };
 
   return (
-    <div className="dash">
-      <header className="card header">JustDance CV Dashboard</header>
+    <div className="home">
+      <TopNav showAuthButtons={false} />
 
-      <section className="card camera">Camera + Ghost Overlay Canvas</section>
+      <main className="home-main dash-main">
+        <section className="dash-hero">
+          <p className="dash-kicker">Just Dance Platform</p>
+          <h1>Dashboard Workspace</h1>
+          <p>Pick a mode, start a challenge, and track your progress.</p>
+          <div className="dash-hero-actions">
+            <Link to="/friendly-challenge" className="dash-btn primary">
+              Start Friendly Challenge
+            </Link>
+            <Link to="/enter-code" className="dash-btn">
+              Enter Code
+            </Link>
+            <button type="button" className="dash-btn ghost" onClick={handleLogout}>
+              Log Out
+            </button>
+          </div>
+        </section>
 
-      <section className="card stats">
-        <h3>Live Score</h3>
-        <p>Score: {score}</p>
-        <p>Label: {label}</p>
-        <p>Combo: {combo}</p>
-        <p>Time: {time.toFixed(2)}s</p>
-      </section>
-
-      <section className="card controls">
-        <h3>Routine</h3>
-        <button type="button">Load Demo Routine</button>
-        <button type="button">Upload routine.json</button>
-        <button type="button">Start Recording</button>
-        <button type="button">Download routine.json</button>
-      </section>
-
-      <section className="card audio">
-        <h3>Audio</h3>
-        <button type="button">Play</button>
-        <button type="button">Pause</button>
-      </section>
+        <section className="dash-grid">
+          <article className="dash-card">
+            <h3>Studio</h3>
+            <p>Upload source dance videos and tune difficulty settings for match scoring.</p>
+          </article>
+          <article className="dash-card">
+            <h3>Challenges</h3>
+            <p>Create shareable links and challenge friends to beat your choreography score.</p>
+          </article>
+          <article className="dash-card">
+            <h3>Stats</h3>
+            <p>Track streaks, win rate, and consistency while you improve each round.</p>
+          </article>
+          <article className="dash-card">
+            <h3>Leaderboard</h3>
+            <p>See where your team ranks and which tracks are trending right now.</p>
+          </article>
+        </section>
+      </main>
     </div>
   );
 }

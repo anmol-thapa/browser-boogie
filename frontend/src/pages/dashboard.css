@@ -1,55 +1,93 @@
-.dash {
-  min-height: 100vh;
-  padding: 16px;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 2fr 1fr;
-  grid-template-areas:
-    "header header"
-    "camera stats"
-    "camera controls"
-    "audio controls";
+.dash-main {
+  width: min(1200px, 95vw);
+  align-items: stretch;
+  gap: 18px;
 }
 
-.card {
-  background: #c300ff;
-  border: 1px solid #000000;
-  border-radius: 10px;
-  padding: 12px;
+.dash-hero {
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #c7d3e6;
+  border-radius: 16px;
+  padding: 22px;
 }
 
-.header {
-  grid-area: header;
+.dash-kicker {
+  margin: 0;
+  color: #456fb3;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
-.camera {
-  grid-area: camera;
-  min-height: 420px;
+.dash-hero h1 {
+  margin: 8px 0 8px;
+  font-size: clamp(1.8rem, 3.2vw, 2.4rem);
 }
 
-.stats {
-  grid-area: stats;
+.dash-hero p {
+  margin: 0;
+  color: #40516c;
 }
 
-.controls {
-  grid-area: controls;
+.dash-hero-actions {
+  margin-top: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.audio {
-  grid-area: audio;
+.dash-btn {
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid #9fb3d0;
+  background: #edf3ff;
+  color: #1f2f4a;
+  font-weight: 700;
+  padding: 10px 14px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-btn.primary {
+  background: #dfeaff;
+  border-color: #7f9fcd;
+}
+
+.dash-btn.ghost {
+  background: #ffffff;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dash-card {
+  background: #ffffff;
+  border: 1px solid #c7d3e6;
+  border-radius: 14px;
+  padding: 16px;
+  text-align: left;
+}
+
+.dash-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.dash-card p {
+  margin: 0;
+  color: #445774;
+  line-height: 1.45;
 }
 
 @media (max-width: 900px) {
-  .dash {
+  .dash-grid {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "header"
-      "camera"
-      "stats"
-      "controls"
-      "audio";
   }
 }

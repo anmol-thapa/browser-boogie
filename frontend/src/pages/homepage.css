@@ -17,6 +17,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .home-logo-link,
@@ -62,6 +63,65 @@
   gap: 10px;
 }
 
+.home-user-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-user-label {
+  min-height: 40px;
+  padding: 8px 2px;
+  color: #2a4f90;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home-user-icon {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+}
+
+.home-user-icon::before,
+.home-user-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 2px solid #2a4f90;
+}
+
+.home-user-icon::before {
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.home-user-icon::after {
+  top: 8px;
+  width: 12px;
+  height: 7px;
+  border-radius: 10px 10px 8px 8px;
+  border-top: 0;
+}
+
+.home-logout {
+  min-height: 40px;
+  border: 1px solid #b9c2cf;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #ffffff;
+  color: #20324f;
+  font-weight: 600;
+}
+
 .home-signup {
   min-width: 140px;
   border: 1px solid #8fa3c4;
@@ -84,6 +144,50 @@
   gap: 38px;
   padding: 28px 16px 48px;
   text-align: center;
+}
+
+.auth-main {
+  justify-content: center;
+  gap: 18px;
+}
+
+.auth-subtitle {
+  margin: 10px 0 0;
+  color: #445066;
+}
+
+.auth-feedback {
+  margin: 6px 0 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.auth-feedback.error {
+  background: #fee9e9;
+  border: 1px solid #f0bbbb;
+  color: #8f1f1f;
+}
+
+.auth-feedback.success {
+  background: #e9f9ee;
+  border: 1px solid #b7e4c1;
+  color: #205f2c;
+}
+
+.auth-switch {
+  margin: 14px 0 0;
+  color: #445066;
+}
+
+.auth-switch-link {
+  color: #345fa8;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.auth-switch-link:hover {
+  text-decoration: underline;
 }
 
 .home-title {
@@ -170,11 +274,22 @@
     gap: 6px;
   }
 
+  .home-user-links {
+    gap: 6px;
+  }
+
   .home-login,
-  .home-signup {
+  .home-signup,
+  .home-user-label,
+  .home-logout {
     min-width: auto;
     padding: 8px 10px;
     font-size: 0.9rem;
+  }
+
+  .home-user-label {
+    padding: 8px 2px;
+    font-size: 0.85rem;
   }
 
   .home-actions {

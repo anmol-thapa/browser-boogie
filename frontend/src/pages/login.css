@@ -5,10 +5,11 @@
   border-radius: 16px;
   padding: 24px;
   text-align: left;
+  box-shadow: 0 12px 26px rgba(23, 37, 84, 0.08);
 }
 
 .login-title {
-  margin: 0 0 18px 0;
+  margin: 0;
   font-size: 2rem;
   line-height: 1.1;
 }
@@ -17,6 +18,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 14px;
 }
 
 .login-label {
@@ -32,6 +34,11 @@
   font-size: 1rem;
 }
 
+.login-input:focus-visible {
+  outline: 2px solid rgba(79, 135, 255, 0.32);
+  border-color: #4f87ff;
+}
+
 .login-submit {
   margin-top: 8px;
   height: 44px;
@@ -40,4 +47,10 @@
   background: #e7eef9;
   font-size: 1rem;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
