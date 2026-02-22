@@ -1,6 +1,8 @@
 # Environments
 .venv/
 env/
+.env
+.env.*
 
 # PyCharm specific
 .idea/
