@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "sessionId": "f84e4a96-4e79-4c74-a91e-bea992bcb04d",
+  "userId": "c08c8fa2-86e6-4e8e-8209-490b04e84e61",
+  "folderId": "3d2ac5eebb71d390",
+  "updatedAt": "2026-02-22T10:47:29.374571+00:00",
+  "files": {
+    "loadZipFile": {
+      "name": "yoga-demo-package.zip",
+      "kind": "binary",
+      "mime": "application/zip",
+      "size": 4866508
+    },
+    "createVideoFile": {
+      "name": "Office_Break_Yoga_14-Minute_Yoga_Practice_-_Yoga_With_Adriene_720p_h264_.mov",
+      "kind": "binary",
+      "mime": "video/quicktime",
+      "size": 2382042
+    },
+    "playAudioFile": {
+      "name": "Office_Break_Yoga_14-Minute_Yoga_Practice_-_Yoga_With_Adriene_720p_h264_.mov",
+      "kind": "binary",
+      "mime": "video/quicktime",
+      "size": 2382042
+    },
+    "loadWebcamVideoFile": {
+      "name": "Office_Break_Yoga_14-Minute_Yoga_Practice_-_Yoga_With_Adriene_720p_h264_.mov",
+      "kind": "binary",
+      "mime": "video/quicktime",
+      "size": 2382042
+    },
+    "generatedRoutine": {
+      "name": "generatedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 883256
+    },
+    "loadedRoutine": {
+      "name": "loadedRoutine.json",
+      "kind": "json",
+      "mime": "application/json",
+      "size": 883256
+    }
+  },
+  "values": {
+    "recordedWebcamLayout": "side-by-side"
+  }
+}

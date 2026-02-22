@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getSavedSession } from "../../lib/supabaseClient";
 
-const STORAGE_KEY = "justdance_frontend_test_sessions_v2";
+const STORAGE_KEY_PREFIX = "justdance_frontend_test_sessions_v2";
 
 const MODE_OPTIONS = [
   { id: "record", label: "Recording Session", hint: "Create a routine from webcam recording." },
@@ -12,6 +13,13 @@ const WEBCAM_LAYOUT_OPTIONS = [
   { id: "raw", label: "Raw Webcam" },
   { id: "side-by-side", label: "Side-By-Side" },
 ];
+
+const DIFFICULTY_OPTIONS = [
+  { id: "easy", label: "Easy" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+];
+const DEFAULT_DIFFICULTY = "high";
 
 const MODEL_PATH = "/pose_landmarker.task";
 const POSE_CONNECTIONS = [
@@ -69,6 +77,116 @@ function roundN(v, digits) {
   return Math.round(Number(v) * scale) / scale;
 }
 
+function normalizeDifficulty(value, fallback = DEFAULT_DIFFICULTY) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "easy" || normalized === "medium" || normalized === "high") {
+    return normalized;
+  }
+  return fallback;
+}
+
+function difficultyLabel(value) {
+  return DIFFICULTY_OPTIONS.find((opt) => opt.id === normalizeDifficulty(value))?.label || "High";
+}
+
+function difficultyParams(value) {
+  const level = normalizeDifficulty(value);
+  if (level === "easy") {
+    return {
+      windowSec: .8,
+      poseDecay: 0.7,
+      angleToleranceDeg: 140,
+    };
+  }
+  if (level === "medium") {
+    return {
+      windowSec: 0.5,
+      poseDecay: 1,
+      angleToleranceDeg: 120,
+    };
+  }
+  return {
+    windowSec: 0.3,
+    poseDecay: 1.5,
+    angleToleranceDeg: 90,
+  };
+}
+
+function scoreToLetterGrade(score) {
+  const s = Math.max(0, Math.min(100, Number(score) || 0));
+  if (s >= 95) return "A+";
+  if (s >= 90) return "A";
+  if (s >= 85) return "B+";
+  if (s >= 80) return "B";
+  if (s >= 75) return "C+";
+  if (s >= 70) return "C";
+  if (s >= 65) return "D";
+  return "F";
+}
+
+function buildCurrentUserProfile() {
+  const session = getSavedSession();
+  const rawId = String(session?.user?.id || session?.user?.email || "guest_local");
+  const userId = rawId.replace(/[^a-zA-Z0-9._:@-]+/g, "_").slice(0, 120) || "guest_local";
+  const username = session?.user?.user_metadata?.username;
+  const rawDisplay = typeof username === "string" && username.trim()
+    ? username.trim()
+    : (session?.user?.email?.split("@")[0] || "Guest Dancer");
+  const displayName = String(rawDisplay).slice(0, 48) || "Guest Dancer";
+  return {
+    userId,
+    displayName,
+  };
+}
+
+function emptyUserStats(profile) {
+  return {
+    userId: profile?.userId || "guest_local",
+    displayName: profile?.displayName || "Dancer",
+    runs: 0,
+    averageScore: 0,
+    bestScore: 0,
+    longestDurationSec: 0,
+    grade: "N/A",
+    lastRunAt: "",
+    recentRuns: [],
+  };
+}
+
+async function fetchUserStatsSummary(userId) {
+  const response = await fetch(`/api/stats/summary?userId=${encodeURIComponent(userId)}`);
+  if (!response.ok) {
+    throw new Error(`stats summary failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return payload?.userSummary || null;
+}
+
+async function fetchGlobalLeaderboard(limit = 25) {
+  const response = await fetch(`/api/stats/leaderboard?limit=${encodeURIComponent(limit)}`);
+  if (!response.ok) {
+    throw new Error(`leaderboard failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload?.leaderboard) ? payload.leaderboard : [];
+}
+
+async function recordPracticeStats(userProfile, run) {
+  const response = await fetch("/api/stats/record", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: userProfile?.userId || "guest_local",
+      displayName: userProfile?.displayName || "Dancer",
+      run,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`stats record failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 function angleDegrees2d(a, b, c) {
   if (!a || !b || !c) return null;
   const bax = a[0] - b[0];
@@ -107,17 +225,19 @@ function lm2dToLandmarks(lm2d) {
   return lm2d.map((p) => ({ x: Number(p?.[0]) || 0, y: Number(p?.[1]) || 0 }));
 }
 
-function buildRoutinePayload(name, frames) {
+function buildRoutinePayload(name, frames, options = {}) {
   const safeFrames = Array.isArray(frames) ? frames : [];
   const durationSec = safeFrames.length > 0 ? Number(safeFrames[safeFrames.length - 1].t) || 0 : 0;
   const fps =
     safeFrames.length >= 2 && durationSec > 0
       ? roundN((safeFrames.length - 1) / durationSec, 2)
       : 30;
+  const difficulty = normalizeDifficulty(options?.difficulty, DEFAULT_DIFFICULTY);
 
   return {
     version: 1,
     name: name || "User Routine",
+    difficulty,
     fps,
     durationSec: roundN(durationSec, 3),
     song: { title: "Unknown Track", offsetSec: 0 },
@@ -187,10 +307,11 @@ function normalizeLm2dForScore(lm2d) {
   return out;
 }
 
-function poseSimilarityPercent(refLm2d, liveLm2d) {
+function poseSimilarityPercent(refLm2d, liveLm2d, difficulty = DEFAULT_DIFFICULTY) {
   const refNorm = normalizeLm2dForScore(refLm2d);
   const liveNorm = normalizeLm2dForScore(liveLm2d);
   if (!refNorm || !liveNorm) return null;
+  const params = difficultyParams(difficulty);
   let totalDist = 0;
   let count = 0;
   for (const id of SCORE_POINT_IDS) {
@@ -202,13 +323,14 @@ function poseSimilarityPercent(refLm2d, liveLm2d) {
   }
   if (count < 6) return null;
   const avgDist = totalDist / count;
-  const similarity = Math.exp(-1.85 * avgDist);
+  const similarity = Math.exp(-params.poseDecay * avgDist);
   return Math.max(0, Math.min(100, similarity * 100));
 }
 
-function angleSimilarityPercent(refAngles, liveAngles) {
+function angleSimilarityPercent(refAngles, liveAngles, difficulty = DEFAULT_DIFFICULTY) {
   if (!refAngles || !liveAngles) return null;
   const keys = ["lElbow", "rElbow", "lShoulder", "rShoulder", "lKnee", "rKnee"];
+  const params = difficultyParams(difficulty);
   let total = 0;
   let count = 0;
   for (const key of keys) {
@@ -216,7 +338,7 @@ function angleSimilarityPercent(refAngles, liveAngles) {
     const live = Number(liveAngles[key]);
     if (!Number.isFinite(ref) || !Number.isFinite(live)) continue;
     const diff = Math.abs(ref - live);
-    const similarity = Math.max(0, 1 - diff / 75);
+    const similarity = Math.max(0, 1 - diff / params.angleToleranceDeg);
     total += similarity;
     count += 1;
   }
@@ -224,7 +346,7 @@ function angleSimilarityPercent(refAngles, liveAngles) {
   return (total / count) * 100;
 }
 
-function computeFrameScorePercent(referenceFrame, liveLandmarks) {
+function computeFrameScorePercent(referenceFrame, liveLandmarks, difficulty = DEFAULT_DIFFICULTY) {
   if (!referenceFrame?.lm2d || !Array.isArray(liveLandmarks) || liveLandmarks.length < 29) return null;
   const liveLm2d = liveLandmarks.map((p) => [Number(p?.x) || 0, Number(p?.y) || 0]);
   const refAngles = referenceFrame.angles && typeof referenceFrame.angles === "object"
@@ -232,8 +354,8 @@ function computeFrameScorePercent(referenceFrame, liveLandmarks) {
     : extractAnglesFromLm2d(referenceFrame.lm2d);
   const liveAngles = extractAnglesFromLm2d(liveLm2d);
 
-  const poseScore = poseSimilarityPercent(referenceFrame.lm2d, liveLm2d);
-  const angleScore = angleSimilarityPercent(refAngles, liveAngles);
+  const poseScore = poseSimilarityPercent(referenceFrame.lm2d, liveLm2d, difficulty);
+  const angleScore = angleSimilarityPercent(refAngles, liveAngles, difficulty);
 
   if (poseScore == null && angleScore == null) return null;
   if (poseScore == null) return angleScore;
@@ -258,13 +380,18 @@ function defaultImportDraft() {
     loadZipFile: null,
     sourceVideoFileName: "",
     sourceVideoFile: null,
+    sourceVideoDifficulty: DEFAULT_DIFFICULTY,
     friendShareCode: "",
   };
 }
 
-function loadStoredSessions() {
+function storageKeyForUser(userId) {
+  return `${STORAGE_KEY_PREFIX}::${userId || "guest_local"}`;
+}
+
+function loadStoredSessions(storageKey) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -370,8 +497,9 @@ async function seekVideoTo(video, tSec) {
   await waitForMediaEvent(video, "seeked");
 }
 
-async function buildRoutineFromVideoFile(videoFile, routineName, onProgress) {
+async function buildRoutineFromVideoFile(videoFile, routineName, onProgress, options = {}) {
   const landmarker = await createImportPoseLandmarker();
+  const difficulty = normalizeDifficulty(options?.difficulty, DEFAULT_DIFFICULTY);
   const video = document.createElement("video");
   video.preload = "auto";
   video.playsInline = true;
@@ -419,7 +547,7 @@ async function buildRoutineFromVideoFile(videoFile, routineName, onProgress) {
       throw new Error("No person found in video.");
     }
 
-    const routine = buildRoutinePayload(routineName, frames);
+    const routine = buildRoutinePayload(routineName, frames, { difficulty });
     routine.durationSec = roundN(duration, 3);
     return routine;
   } finally {
@@ -458,9 +586,10 @@ function hasPersistableContent(bundle) {
   });
 }
 
-async function persistSessionBundleToDisk({ sessionId, folderId, bundle }) {
+async function persistSessionBundleToDisk({ userId, sessionId, folderId, bundle }) {
   const form = new FormData();
   if (folderId) form.append("folder_id", folderId);
+  if (userId) form.append("user_id", userId);
 
   const manifest = {
     version: 1,
@@ -556,8 +685,9 @@ async function decodeStoragePayloadToBundle(payload) {
   };
 }
 
-async function loadSessionBundleFromDisk(folderId) {
-  const response = await fetch(`/api/storage/load/${encodeURIComponent(folderId)}`);
+async function loadSessionBundleFromDisk(folderId, userId) {
+  const query = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+  const response = await fetch(`/api/storage/load/${encodeURIComponent(folderId)}${query}`);
   if (response.status === 404) {
     return { missing: true, bundle: null };
   }
@@ -606,13 +736,14 @@ async function loadSessionBundleFromShareCode(code) {
   };
 }
 
-async function createShareCode(folderId, sessionId) {
+async function createShareCode(folderId, sessionId, userId) {
   const response = await fetch("/api/share/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       folderId,
       sessionId,
+      userId: userId || "",
     }),
   });
   if (!response.ok) {
@@ -628,6 +759,40 @@ async function createShareCode(folderId, sessionId) {
   return payload;
 }
 
+async function fetchBrowseSelections() {
+  const response = await fetch("/api/selection/list");
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405 || response.status === 501) {
+      throw new Error("Browse API unavailable. Restart backend with `python app.py`.");
+    }
+    throw new Error(`browse list failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+async function loadBrowseSelection(selectionId) {
+  const normalized = String(selectionId || "").trim();
+  if (!normalized) {
+    throw new Error("Selection is missing an id.");
+  }
+  const response = await fetch(`/api/selection/load/${encodeURIComponent(normalized)}`);
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Selection was not found.");
+    }
+    if (response.status === 400) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error || "Selection is missing required files.");
+    }
+    if (response.status === 405 || response.status === 501) {
+      throw new Error("Browse API unavailable. Restart backend with `python app.py`.");
+    }
+    throw new Error(`browse load failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 function isShareableSession(session) {
   if (!session) return false;
   return session.mode === "load-routine" || session.status === "ready" || session.status === "completed";
@@ -637,12 +802,14 @@ function deriveSessionConfigFromBundle(bundle = {}) {
   const routine =
     (bundle.loadedRoutine && typeof bundle.loadedRoutine === "object" ? bundle.loadedRoutine : null) ||
     (bundle.generatedRoutine && typeof bundle.generatedRoutine === "object" ? bundle.generatedRoutine : null);
+  const difficulty = normalizeDifficulty(routine?.difficulty, DEFAULT_DIFFICULTY);
   const zipName = bundle.loadZipFile?.name || "";
   const title = routine?.name || basename(zipName).replace(/\.zip$/i, "") || "Friend Session";
   const config = {
     packageZipFileName: zipName || `${safeRoutineName(title)}-package.zip`,
     requiredContents: ["routine.json", "audio/video source"],
     optionalContents: ["webcam video"],
+    difficulty,
   };
   return { title, config };
 }
@@ -675,20 +842,24 @@ function buildSessionFromDraft(draft) {
   };
 
   if (draft.mode === "record") {
+    const includeWebcamVideo = draft.recordIncludeWebcamVideo !== false;
     base.config = {
       audioFileName: draft.recordAudioFileName,
-      includeWebcamVideo: Boolean(draft.recordIncludeWebcamVideo),
-      webcamLayout: draft.recordIncludeWebcamVideo ? draft.recordWebcamLayout : null,
+      includeWebcamVideo,
+      webcamLayout: includeWebcamVideo ? (draft.recordWebcamLayout || "raw") : null,
+      difficulty: normalizeDifficulty(draft.recordDifficulty, DEFAULT_DIFFICULTY),
     };
   } else if (draft.mode === "load-routine") {
     base.config = {
       packageZipFileName: draft.loadZipFileName,
       requiredContents: ["routine.json", "audio/video source"],
       optionalContents: ["webcam video"],
+      difficulty: normalizeDifficulty(draft.loadDifficulty, DEFAULT_DIFFICULTY),
     };
   } else if (draft.mode === "create-video") {
     base.config = {
       videoFileName: draft.createVideoFileName,
+      difficulty: normalizeDifficulty(draft.createVideoDifficulty, DEFAULT_DIFFICULTY),
     };
   }
 
@@ -700,37 +871,56 @@ function describeSessionConfig(session) {
     const webcam = session.config.includeWebcamVideo
       ? `Webcam: ${session.config.webcamLayout === "side-by-side" ? "Side-By-Side" : "Raw"}`
       : "Webcam: none";
-    return `Audio: ${session.config.audioFileName || "none"} | ${webcam}`;
+    return `Audio: ${session.config.audioFileName || "none"} | Difficulty: ${difficultyLabel(session.config?.difficulty)} | ${webcam}`;
   }
   if (session.mode === "load-routine") {
-    const base = `Play Package: ${session.config.packageZipFileName} (needs routine.json + audio)`;
+    const base = `Play Package: ${session.config.packageZipFileName}`;
+    const withDifficulty = `${base} | Difficulty: ${difficultyLabel(session.config?.difficulty)}`;
     if (session.config?.shareCode) {
-      return `${base} | Share: ${session.config.shareCode}`;
+      return `${withDifficulty} | Share: ${session.config.shareCode}`;
     }
-    return base;
+    return withDifficulty;
   }
   if (session.mode === "create-video") {
-    return `Video: ${session.config.videoFileName}`;
+    return `Video: ${session.config.videoFileName} | Difficulty: ${difficultyLabel(session.config?.difficulty)}`;
   }
   return "";
 }
 
 function StudioWorkspace({ onLogout }) {
+  const userProfile = useMemo(() => buildCurrentUserProfile(), []);
+  const userStorageKey = useMemo(() => storageKeyForUser(userProfile.userId), [userProfile.userId]);
   const [view, setView] = useState("main");
   const [mainTab, setMainTab] = useState("dashboard");
-  const [sessions, setSessions] = useState(loadStoredSessions);
+  const [sessions, setSessions] = useState(() => loadStoredSessions(userStorageKey));
   const [sessionFiles, setSessionFiles] = useState({});
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [shareModal, setShareModal] = useState({ open: false, code: "", title: "" });
   const [importDraft, setImportDraft] = useState(defaultImportDraft);
+  const [userStats, setUserStats] = useState(() => emptyUserStats(userProfile));
+  const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState("");
+  const [browseSelections, setBrowseSelections] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState("");
+  const [browseBusyId, setBrowseBusyId] = useState("");
   const persistTimersRef = useRef({});
   const storageWarningShownRef = useRef(false);
   const folderIdBySessionRef = useRef({});
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  }, [sessions]);
+    localStorage.setItem(userStorageKey, JSON.stringify(sessions));
+  }, [sessions, userStorageKey]);
+
+  useEffect(() => {
+    setSessions(loadStoredSessions(userStorageKey));
+    setSessionFiles({});
+    setActiveSessionId(null);
+    setView("main");
+    setMainTab("dashboard");
+  }, [userStorageKey]);
 
   useEffect(() => {
     const next = {};
@@ -749,6 +939,43 @@ function StudioWorkspace({ onLogout }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStats() {
+      setStatsLoading(true);
+      setStatsError("");
+      try {
+        const [summary, leaderboard] = await Promise.all([
+          fetchUserStatsSummary(userProfile.userId),
+          fetchGlobalLeaderboard(25),
+        ]);
+        if (cancelled) return;
+        setUserStats(summary || emptyUserStats(userProfile));
+        setLeaderboardRows(leaderboard);
+      } catch (err) {
+        if (cancelled) return;
+        setStatsError("Stats unavailable. Start backend with `python app.py`.");
+        setUserStats(emptyUserStats(userProfile));
+        setLeaderboardRows([]);
+        console.error("Stats load failed:", err);
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    }
+
+    loadStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [userProfile.userId]);
+
+  useEffect(() => {
+    if (mainTab !== "browse") return;
+    if (browseSelections.length > 0) return;
+    refreshBrowseSelections(false);
+  }, [mainTab, browseSelections.length]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) || null,
@@ -780,6 +1007,7 @@ function StudioWorkspace({ onLogout }) {
     persistTimersRef.current[sessionId] = setTimeout(async () => {
       try {
         const result = await persistSessionBundleToDisk({
+          userId: userProfile.userId,
           sessionId,
           folderId: existingFolderId,
           bundle,
@@ -805,6 +1033,111 @@ function StudioWorkspace({ onLogout }) {
     return { total, completed, recording, loading, fromVideo };
   }, [sessions]);
 
+  async function handlePracticeRunComplete(runSummary) {
+    const runPayload = {
+      sessionId: String(runSummary?.sessionId || ""),
+      sessionTitle: String(runSummary?.sessionTitle || "Practice"),
+      averageScore: Number(runSummary?.averageScore) || 0,
+      bestScore: Number(runSummary?.bestScore) || 0,
+      samples: Number(runSummary?.samples) || 0,
+      durationSec: Number(runSummary?.durationSec) || 0,
+      source: String(runSummary?.source || "play"),
+      difficulty: normalizeDifficulty(runSummary?.difficulty, DEFAULT_DIFFICULTY),
+    };
+    const payload = await recordPracticeStats(userProfile, runPayload);
+    const nextSummary = payload?.userSummary || null;
+    const nextLeaderboard = Array.isArray(payload?.leaderboard) ? payload.leaderboard : null;
+    if (nextSummary) {
+      setUserStats(nextSummary);
+    }
+    if (nextLeaderboard) {
+      setLeaderboardRows(nextLeaderboard);
+    }
+    setStatsError("");
+    return payload;
+  }
+
+  async function refreshBrowseSelections(force = false) {
+    if (browseLoading) return;
+    if (!force && browseSelections.length > 0) return;
+    setBrowseLoading(true);
+    setBrowseError("");
+    try {
+      const items = await fetchBrowseSelections();
+      setBrowseSelections(items);
+    } catch (err) {
+      console.error("Browse selection load failed:", err);
+      setBrowseSelections([]);
+      setBrowseError(err?.message || "Unable to load browse presets.");
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function openBrowseSelectionInStudio(selection) {
+    const selectionId = String(selection?.id || "").trim();
+    if (!selectionId) {
+      setBrowseError("Selection id is missing.");
+      return;
+    }
+
+    setBrowseBusyId(selectionId);
+    setBrowseError("");
+    try {
+      const payload = await loadBrowseSelection(selectionId);
+      const decoded = await decodeStoragePayloadToBundle(payload);
+      const bundle = decoded?.bundle;
+      if (!bundle) {
+        throw new Error("Selection bundle is empty.");
+      }
+
+      const derived = deriveSessionConfigFromBundle(bundle);
+      const title =
+        String(selection?.title || "").trim() ||
+        String(derived?.title || "").trim() ||
+        "Browse Selection";
+      const packageZipFileName =
+        bundle.loadZipFile?.name ||
+        String(selection?.packageZipFileName || "").trim() ||
+        String(derived?.config?.packageZipFileName || "").trim() ||
+        `${safeRoutineName(title)}-package.zip`;
+
+      const session = buildSessionFromDraft({
+        title,
+        mode: "load-routine",
+        recordAudioFileName: "",
+        recordIncludeWebcamVideo: false,
+        recordWebcamLayout: "raw",
+        loadZipFileName: packageZipFileName,
+        loadDifficulty: normalizeDifficulty(derived?.config?.difficulty, DEFAULT_DIFFICULTY),
+        createVideoFileName: "",
+      });
+      session.status = "ready";
+      session.countdownSec = null;
+      session.config = mergeSessionConfig(session.config, {
+        ...derived.config,
+        packageZipFileName,
+        source: "selection",
+        selectionId,
+        selectionCategory: String(selection?.category || ""),
+      });
+
+      addSessionAndOpen(session, {
+        ...bundle,
+        __hydrated: true,
+      });
+
+      if (decoded.missingKeys?.length) {
+        window.alert(`Some preset files are missing: ${decoded.missingKeys.join(", ")}`);
+      }
+    } catch (err) {
+      console.error("Open browse selection failed:", err);
+      setBrowseError(err?.message || "Unable to open selection.");
+    } finally {
+      setBrowseBusyId("");
+    }
+  }
+
   function openImportModal(initialMode = "load-package") {
     setImportDraft((prev) => ({
       ...defaultImportDraft(),
@@ -826,7 +1159,7 @@ function StudioWorkspace({ onLogout }) {
     const targetSession = sessions.find((session) => session.id === sessionId);
     if (targetSession?.dataFolderId && !sessionFiles[sessionId]?.__hydrated) {
       try {
-        const loadResult = await loadSessionBundleFromDisk(targetSession.dataFolderId);
+        const loadResult = await loadSessionBundleFromDisk(targetSession.dataFolderId, userProfile.userId);
         if (loadResult.missing) {
           window.alert("Session data folder was deleted or moved. Re-import files for this session.");
           setSessions((prev) =>
@@ -872,6 +1205,7 @@ function StudioWorkspace({ onLogout }) {
     }
 
     const result = await persistSessionBundleToDisk({
+      userId: userProfile.userId,
       sessionId,
       folderId: "",
       bundle,
@@ -905,8 +1239,9 @@ function StudioWorkspace({ onLogout }) {
       title: "",
       mode: "record",
       recordAudioFileName: "",
-      recordIncludeWebcamVideo: false,
+      recordIncludeWebcamVideo: true,
       recordWebcamLayout: "raw",
+      recordDifficulty: DEFAULT_DIFFICULTY,
       loadZipFileName: "",
       createVideoFileName: "",
     });
@@ -925,6 +1260,7 @@ function StudioWorkspace({ onLogout }) {
         recordIncludeWebcamVideo: false,
         recordWebcamLayout: "raw",
         loadZipFileName: draft.loadZipFileName,
+        loadDifficulty: DEFAULT_DIFFICULTY,
         createVideoFileName: "",
       });
       addSessionAndOpen(session, { loadZipFile: draft.loadZipFile || null });
@@ -951,6 +1287,7 @@ function StudioWorkspace({ onLogout }) {
         recordIncludeWebcamVideo: false,
         recordWebcamLayout: "raw",
         loadZipFileName: bundle.loadZipFile?.name || config.packageZipFileName || "",
+        loadDifficulty: normalizeDifficulty(config?.difficulty, DEFAULT_DIFFICULTY),
         createVideoFileName: "",
       });
       session.status = "ready";
@@ -973,18 +1310,20 @@ function StudioWorkspace({ onLogout }) {
     }
 
     const sourceVideo = draft.sourceVideoFile;
+    const sourceVideoDifficulty = normalizeDifficulty(draft.sourceVideoDifficulty, DEFAULT_DIFFICULTY);
     const guessedName = draft.title.trim() || basename(draft.sourceVideoFileName).replace(/\.[^.]+$/, "") || "Video Routine";
     setProgress("Analyzing video and extracting pose frames...");
     const routine = await buildRoutineFromVideoFile(sourceVideo, guessedName, (done, total) => {
       const pct = Math.round((done / Math.max(1, total)) * 100);
       setProgress(`Analyzing video... ${pct}%`);
-    });
+    }, { difficulty: sourceVideoDifficulty });
     setProgress("Preparing routine package...");
 
     const packageName = `${safeRoutineName(guessedName)}-package.zip`;
     const sourceName = sanitizeFilename(sourceVideo?.name || `${safeRoutineName(guessedName)}.mp4`);
     const routineExport = {
       ...routine,
+      difficulty: sourceVideoDifficulty,
       song: {
         ...(routine.song || {}),
         offsetSec: Number(routine.song?.offsetSec) || 0,
@@ -1010,6 +1349,7 @@ function StudioWorkspace({ onLogout }) {
       recordIncludeWebcamVideo: false,
       recordWebcamLayout: "raw",
       loadZipFileName: packageName,
+      loadDifficulty: sourceVideoDifficulty,
       createVideoFileName: "",
     });
     session.status = "ready";
@@ -1042,7 +1382,7 @@ function StudioWorkspace({ onLogout }) {
         return;
       }
 
-      const result = await createShareCode(folderId, sessionId);
+      const result = await createShareCode(folderId, sessionId, userProfile.userId);
       const code = String(result?.code || "");
       if (!code) {
         throw new Error("Share code generation failed.");
@@ -1127,6 +1467,7 @@ function StudioWorkspace({ onLogout }) {
         onLogout={onLogout}
         onUpdateSession={updateSession}
         onUpdateSessionFiles={updateSessionFiles}
+        onPracticeRunComplete={handlePracticeRunComplete}
       />
     );
   }
@@ -1135,12 +1476,8 @@ function StudioWorkspace({ onLogout }) {
     <div className="app-root">
       <header className="topbar topbar-home">
         <div className="topbar-home-inner">
-          <div className="brand brand-logo-wrap">
-            <div className="brand-logo-slot" aria-hidden="true">Logo</div>
-            <div className="brand-logo-text">
-              <p className="eyebrow">Just Dance</p>
-              <h1>Creator Console</h1>
-            </div>
+          <div className="brand-logo-text">
+            <h1>BrowserBoogie</h1>
           </div>
           <div className="topbar-home-actions">
             <nav className="tabs" aria-label="Main tabs">
@@ -1176,8 +1513,24 @@ function StudioWorkspace({ onLogout }) {
         {mainTab === "dashboard" && (
           <Dashboard
             onRecord={startRecordSession}
-            onBrowse={() => setMainTab("library")}
+            onBrowse={() => setMainTab("browse")}
             onFriendCode={() => openImportModal("friend-code")}
+            userProfile={userProfile}
+            userStats={userStats}
+            leaderboardRows={leaderboardRows}
+            statsLoading={statsLoading}
+            statsError={statsError}
+          />
+        )}
+
+        {mainTab === "browse" && (
+          <BrowseSelections
+            items={browseSelections}
+            loading={browseLoading}
+            error={browseError}
+            busyId={browseBusyId}
+            onReload={() => refreshBrowseSelections(true)}
+            onOpenSelection={openBrowseSelectionInStudio}
           />
         )}
 
@@ -1212,15 +1565,143 @@ function StudioWorkspace({ onLogout }) {
   );
 }
 
-function Dashboard({ onRecord, onBrowse, onFriendCode }) {
+function Dashboard({ onRecord, onBrowse, onFriendCode, userProfile, userStats, leaderboardRows, statsLoading, statsError }) {
+  const hasStats = Number(userStats?.runs || 0) > 0;
   return (
-    <section className="dashboard-clean">
-      <h2>Quick Start</h2>
-      <p className="muted">Choose what you want to do.</p>
-      <div className="dash-actions">
-        <button className="dash-big-btn" onClick={onRecord}>Record</button>
-        <button className="dash-big-btn" onClick={onBrowse}>Browse</button>
-        <button className="dash-big-btn" onClick={onFriendCode}>Friend Code</button>
+    <div className="dashboard-stack">
+      <section className="dashboard-clean quick-start-panel">
+        <h2>Quick Start</h2>
+        <p className="muted">Record a video, browse a selection of videos, or try a friend's dance!</p>
+        <div className="dash-actions">
+          <button className="dash-big-btn dash-big-btn--record" onClick={onRecord}><span className="dash-big-btn-label">Record</span></button>
+          <button className="dash-big-btn dash-big-btn--browse" onClick={onBrowse}><span className="dash-big-btn-label">Browse</span></button>
+          <button className="dash-big-btn dash-big-btn--friend" onClick={onFriendCode}><span className="dash-big-btn-label">Friend Code</span></button>
+        </div>
+      </section>
+
+      <section className="dashboard-clean stats-clean">
+        <div className="section-head">
+          <h2>Stats</h2>
+          <p className="muted">Profile: {userProfile?.displayName || "Dancer"}</p>
+        </div>
+        {statsLoading && <p className="muted">Loading stats...</p>}
+        {!statsLoading && statsError && <p className="muted">{statsError}</p>}
+        {!statsLoading && !statsError && !hasStats && <p className="muted">Go play some games!</p>}
+        {!statsLoading && !statsError && hasStats && (
+          <div className="stats-grid">
+            <article className="stats-item">
+              <p className="muted">Runs</p>
+              <h3>{userStats.runs}</h3>
+            </article>
+            <article className="stats-item">
+              <p className="muted">Average</p>
+              <h3>{Number(userStats.averageScore || 0).toFixed(1)}%</h3>
+            </article>
+            <article className="stats-item">
+              <p className="muted">Longest Recording</p>
+              <h3>{Number(userStats.longestDurationSec || 0).toFixed(1)}s</h3>
+            </article>
+            <article className="stats-item">
+              <p className="muted">Grade</p>
+              <h3>{userStats.grade || scoreToLetterGrade(userStats.averageScore)}</h3>
+            </article>
+          </div>
+        )}
+
+        <div className="leaderboard-block">
+          <h3>Leaderboard</h3>
+          {leaderboardRows.length === 0 ? (
+            <p className="muted">No ranked players yet.</p>
+          ) : (
+            <div className="leaderboard-list" role="table" aria-label="Leaderboard">
+              <div className="leaderboard-row leaderboard-head" role="row">
+                <span role="columnheader">Rank</span>
+                <span role="columnheader">Player</span>
+                <span role="columnheader">Avg</span>
+                <span role="columnheader">Difficulty</span>
+                <span role="columnheader">Score</span>
+              </div>
+              {leaderboardRows.map((row) => (
+                <div
+                  key={`${row.userId}-${row.rank}`}
+                  className="leaderboard-row"
+                  role="row"
+                >
+                  <span role="cell">#{row.rank}</span>
+                  <span role="cell">{row.displayName}</span>
+                  <span role="cell">{Number(row.averageScore || 0).toFixed(1)}%</span>
+                  <span role="cell">{difficultyLabel(row.difficulty)}</span>
+                  <span role="cell">{Number(row.score || 0).toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BrowseSelections({ items, loading, error, busyId, onReload, onOpenSelection }) {
+  return (
+    <section className="library-wrap browse-wrap">
+      <div className="section-head">
+        <div>
+          <h2>Browse Presets</h2>
+          <p className="muted">Pick preloaded videos to practice and learn!</p>
+        </div>
+        {/* <div className="top-actions">
+          <button className="btn" onClick={onReload} disabled={loading}>
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div> */}
+      </div>
+
+      {error && <p className="meta-line browse-error">{error}</p>}
+      {!loading && !error && items.length === 0 && (
+        <p className="muted">
+          No presets found. Add folders under `selection/` with at least `routine.json` and an audio/video file.
+        </p>
+      )}
+
+      <div className="library-list browse-grid">
+        {items.map((item) => {
+          const selectionId = String(item?.id || "");
+          const isBusy = busyId === selectionId;
+          const tags = Array.isArray(item?.tags) ? item.tags.filter(Boolean) : [];
+          const hasReferenceVideo = Boolean(item?.hasReferenceVideo || item?.hasWebcamVideo || item?.referenceVideoFileName);
+          return (
+            <article key={selectionId} className="session-card browse-card">
+              <div className="browse-card-main">
+                <h3>{item?.title || selectionId}</h3>
+                <p className="muted">{item?.category || "General"}</p>
+                {item?.description && <p className="meta-line">{item.description}</p>}
+                <p className="meta-line">
+                  Source: {item?.mediaFileName || "Unknown"}{" "}
+                  {Number(item?.durationSec) > 0 ? `| ${(Number(item.durationSec) || 0).toFixed(1)}s` : ""}
+                </p>
+                <p className="meta-line">Difficulty: {difficultyLabel(item?.difficulty)}</p>
+                <p className="meta-line">
+                  Reference Video: {hasReferenceVideo ? "Included" : "Not included"}
+                </p>
+                {tags.length > 0 && (
+                  <div className="browse-tags">
+                    {tags.map((tag) => (
+                      <span key={`${selectionId}-${tag}`} className="browse-tag">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="session-actions">
+                <button className="btn btn-primary" onClick={() => onOpenSelection(item)} disabled={isBusy}>
+                  {isBusy ? "Opening..." : "Open In Studio"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -1246,6 +1727,7 @@ function Library({ sessions, onOpenSession, onDeleteSession, onShareSession, onR
               <h3>{session.title}</h3>
               <p className="muted">{modeLabel(session.mode)}</p>
               <p className="meta-line">{describeSessionConfig(session)}</p>
+              <p className="meta-line">Difficulty: {difficultyLabel(session?.config?.difficulty)}</p>
               <p className="meta-line">Created {formatDateTime(session.createdAt)}</p>
               <p className="meta-line">Last run {session.lastRunSec.toFixed(1)}s | Runs {session.runs}</p>
               {session.status === "missing-data" && (
@@ -1268,12 +1750,23 @@ function Library({ sessions, onOpenSession, onDeleteSession, onShareSession, onR
   );
 }
 
-function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, onUpdateSession, onUpdateSessionFiles }) {
+function StudioPage({
+  session,
+  sessionFiles,
+  onBack,
+  onGoDashboard,
+  onLogout,
+  onUpdateSession,
+  onUpdateSessionFiles,
+  onPracticeRunComplete,
+}) {
   const [phase, setPhase] = useState("idle");
   const [countdownRemaining, setCountdownRemaining] = useState(0);
+  const [playCountdownRemaining, setPlayCountdownRemaining] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [recordingStartMs, setRecordingStartMs] = useState(0);
   const [localCountdown, setLocalCountdown] = useState(3);
+  const [localDifficulty, setLocalDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [cameraState, setCameraState] = useState("requesting");
   const [poseState, setPoseState] = useState("loading");
   const [statusMessage, setStatusMessage] = useState("");
@@ -1290,6 +1783,12 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
   const [liveScore, setLiveScore] = useState(null);
   const [avgScore, setAvgScore] = useState(null);
   const [bestScore, setBestScore] = useState(null);
+  const [practiceResultModal, setPracticeResultModal] = useState({
+    open: false,
+    summary: null,
+    saving: false,
+    saveError: "",
+  });
   const videoRef = useRef(null);
   const referenceVideoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -1311,10 +1810,13 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
   const mediaRecorderRef = useRef(null);
   const webcamChunksRef = useRef([]);
   const webcamMimeTypeRef = useRef("");
+  const shouldCaptureWebcamRunRef = useRef(true);
   const composeCanvasRef = useRef(null);
   const composeRafRef = useRef(0);
   const composeActiveRef = useRef(false);
   const webcamRecordingStopLockRef = useRef(false);
+  const playCountdownTimerRef = useRef(0);
+  const practiceFinalizeLockRef = useRef(false);
   const scoreStatsRef = useRef({
     total: 0,
     count: 0,
@@ -1346,6 +1848,35 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       setLiveScore(roundN(clamped, 1));
       setAvgScore(roundN(stats.total / stats.count, 1));
       setBestScore(roundN(stats.best, 1));
+    }
+  }
+
+  function updateRecordSessionConfig(patch = {}) {
+    if (!session || session.mode !== "record") return;
+    const current = session.config && typeof session.config === "object" ? session.config : {};
+    const next = {
+      audioFileName: Object.prototype.hasOwnProperty.call(patch, "audioFileName")
+        ? patch.audioFileName
+        : (current.audioFileName || sessionFiles?.recordAudioFile?.name || ""),
+      includeWebcamVideo: Object.prototype.hasOwnProperty.call(patch, "includeWebcamVideo")
+        ? Boolean(patch.includeWebcamVideo)
+        : Boolean(current.includeWebcamVideo),
+      webcamLayout: Object.prototype.hasOwnProperty.call(patch, "webcamLayout")
+        ? patch.webcamLayout
+        : (current.webcamLayout || "raw"),
+      difficulty: normalizeDifficulty(
+        patch.difficulty,
+        normalizeDifficulty(current.difficulty, localDifficulty)
+      ),
+    };
+    setLocalDifficulty(next.difficulty);
+    onUpdateSession(session.id, { config: next });
+  }
+
+  function clearPlayCountdownTimer() {
+    if (playCountdownTimerRef.current) {
+      clearInterval(playCountdownTimerRef.current);
+      playCountdownTimerRef.current = 0;
     }
   }
 
@@ -1412,7 +1943,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
   }
 
   function startWebcamRecordingCapture() {
-    if (!session?.config?.includeWebcamVideo) return true;
+    if (!shouldCaptureWebcamRunRef.current) return true;
     if (typeof MediaRecorder === "undefined") {
       setStatusMessage("Recording started, but browser does not support webcam video export.");
       return false;
@@ -1480,7 +2011,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
         mediaRecorderRef.current = null;
         webcamRecordingStopLockRef.current = false;
 
-        if (discard || !chunks.length || !session?.config?.includeWebcamVideo) {
+        if (discard || !chunks.length || !shouldCaptureWebcamRunRef.current) {
           resolve(null);
           return;
         }
@@ -1516,7 +2047,10 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     setPhase("idle");
     setElapsedSec(0);
     setCountdownRemaining(0);
+    setPlayCountdownRemaining(0);
+    clearPlayCountdownTimer();
     setLocalCountdown(session.countdownSec || 3);
+    setLocalDifficulty(normalizeDifficulty(session.config?.difficulty, DEFAULT_DIFFICULTY));
     setStatusMessage("");
     setCompareActive(false);
     setPlayLayout("overlay");
@@ -1524,11 +2058,19 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     setForcePlayUi(false);
     resetScoring();
     setRecordedFramesCount(0);
+    setPracticeResultModal({
+      open: false,
+      summary: null,
+      saving: false,
+      saveError: "",
+    });
+    practiceFinalizeLockRef.current = false;
     recordingFramesRef.current = [];
     recordingStartMsRef.current = 0;
     lastSampleMsRef.current = 0;
     webcamChunksRef.current = [];
     webcamMimeTypeRef.current = "";
+    shouldCaptureWebcamRunRef.current = true;
     webcamRecordingStopLockRef.current = false;
   }, [session?.id]);
 
@@ -1606,13 +2148,39 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     async function resolveRoutinePackage() {
       if (session.mode !== "load-routine") {
         const fromFiles = sessionFiles?.generatedRoutine || null;
-        setRoutineData(fromFiles);
+        if (!fromFiles) {
+          setRoutineData(null);
+          return;
+        }
+        setRoutineData({
+          ...fromFiles,
+          difficulty: normalizeDifficulty(
+            fromFiles?.difficulty,
+            normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)
+          ),
+        });
         return;
       }
 
       const readyRoutine = sessionFiles?.generatedRoutine || sessionFiles?.loadedRoutine || null;
       if (readyRoutine) {
-        setRoutineData(readyRoutine);
+        const normalizedDifficulty = normalizeDifficulty(
+          readyRoutine?.difficulty,
+          normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)
+        );
+        const normalizedRoutine = {
+          ...readyRoutine,
+          difficulty: normalizedDifficulty,
+        };
+        setRoutineData(normalizedRoutine);
+        if (session?.config?.difficulty !== normalizedDifficulty) {
+          onUpdateSession(session.id, {
+            config: {
+              ...(session.config || {}),
+              difficulty: normalizedDifficulty,
+            },
+          });
+        }
         return;
       }
 
@@ -1636,7 +2204,15 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
         }
 
         const routineText = await routineEntry.async("string");
-        const routine = JSON.parse(routineText);
+        const routineRaw = JSON.parse(routineText);
+        const normalizedDifficulty = normalizeDifficulty(
+          routineRaw?.difficulty,
+          normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)
+        );
+        const routine = {
+          ...(routineRaw && typeof routineRaw === "object" ? routineRaw : {}),
+          difficulty: normalizedDifficulty,
+        };
         const audioEntry = entries.find((entry) => isLikelyAudioFileName(basename(entry.name)));
         const routineWebcamName = basename(routine?.webcam?.fileName || "");
         const webcamEntry = entries.find((entry) => {
@@ -1666,6 +2242,12 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
 
         if (cancelled) return;
         setRoutineData(routine);
+        onUpdateSession(session.id, {
+          config: {
+            ...(session.config || {}),
+            difficulty: normalizedDifficulty,
+          },
+        });
         onUpdateSessionFiles(session.id, {
           loadedRoutine: routine,
           loadAudioFile: audioFile,
@@ -1691,6 +2273,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     sessionFiles?.generatedRoutine,
     sessionFiles?.loadedRoutine,
     sessionFiles?.loadZipFile,
+    session?.config?.difficulty,
   ]);
 
   useEffect(() => {
@@ -1790,12 +2373,17 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
           const durationSec = Number(routine.durationSec) || 0;
           let refT = Number(audioRef.current.currentTime) || 0;
           if (durationSec > 0) refT = refT % durationSec;
-          const refFrame = nearestFrameAtTime(routine, refT, 0.25);
+          const activeDifficulty = normalizeDifficulty(
+            routine?.difficulty,
+            normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)
+          );
+          const params = difficultyParams(activeDifficulty);
+          const refFrame = nearestFrameAtTime(routine, refT, params.windowSec);
           if (refFrame?.lm2d) {
             if (playLayoutRef.current !== "side-by-side") {
               drawPoseSkeleton(ctx, lm2dToLandmarks(refFrame.lm2d), canvas.width, canvas.height, "#60a5fa");
             }
-            const score = computeFrameScorePercent(refFrame, lastLandmarksRef.current);
+            const score = computeFrameScorePercent(refFrame, lastLandmarksRef.current, activeDifficulty);
             pushScoreSample(score, nowMs);
           }
         }
@@ -1871,6 +2459,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
 
     return () => {
       cancelled = true;
+      clearPlayCountdownTimer();
       stopSideBySideComposer();
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         try {
@@ -1947,13 +2536,14 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
         return;
       }
       if (compareActiveRef.current) {
+        const endedDurationSec = Number(audio.currentTime || audio.duration || 0);
         compareActiveRef.current = false;
         setCompareActive(false);
         if (referenceVideoRef.current) {
           referenceVideoRef.current.pause();
           referenceVideoRef.current.currentTime = 0;
         }
-        setStatusMessage("Play session finished.");
+        finalizePracticeRun("finished", endedDurationSec);
       }
     };
     audio.addEventListener("ended", onEnded);
@@ -2011,7 +2601,14 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       return;
     }
     const next = Math.max(1, Math.min(30, Number(localCountdown) || 3));
+    const recordDifficulty = normalizeDifficulty(session?.config?.difficulty, localDifficulty);
+    const shouldCaptureWebcam = Boolean(showPlayWebcam);
+    shouldCaptureWebcamRunRef.current = shouldCaptureWebcam;
     setLocalCountdown(next);
+    setLocalDifficulty(recordDifficulty);
+    if (session?.config?.includeWebcamVideo !== shouldCaptureWebcam) {
+      updateRecordSessionConfig({ includeWebcamVideo: shouldCaptureWebcam });
+    }
     setForcePlayUi(false);
     onUpdateSession(session.id, { countdownSec: next, status: "armed" });
     setCompareActive(false);
@@ -2069,7 +2666,10 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       return;
     }
 
-    const routine = buildRoutinePayload(session.title, recordingFramesRef.current);
+    const recordDifficulty = normalizeDifficulty(session?.config?.difficulty, localDifficulty);
+    const routine = buildRoutinePayload(session.title, recordingFramesRef.current, {
+      difficulty: recordDifficulty,
+    });
     setRoutineData(routine);
     setPlayLayout("overlay");
     setForcePlayUi(true);
@@ -2090,16 +2690,71 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
         packageZipFileName: `${safeRoutineName(session.title)}-package.zip`,
         requiredContents: ["routine.json", "audio/video source"],
         optionalContents: ["webcam video"],
+        difficulty: recordDifficulty,
       },
     });
     setStatusMessage(
       webcamFile
         ? "Recording complete. Webcam video captured and ready in export."
-        : (session.config?.includeWebcamVideo
+        : (shouldCaptureWebcamRunRef.current
           ? "Recording complete, but webcam capture was not produced by this browser."
-          : "Recording complete.")
+          : "Recording complete. Webcam was off, so no webcam video was saved.")
     );
     phaseRef.current = "idle";
+  }
+
+  function finalizePracticeRun(reason = "finished", durationOverrideSec = null) {
+    if (practiceFinalizeLockRef.current) return;
+    practiceFinalizeLockRef.current = true;
+
+    const stats = scoreStatsRef.current;
+    const samples = Number(stats?.count || 0);
+    if (samples <= 0) {
+      setStatusMessage(reason === "stopped" ? "Play session stopped." : "Play session finished.");
+      return;
+    }
+
+    const averageScore = roundN((stats.total || 0) / samples, 1);
+    const bestScoreValue = roundN(stats.best || 0, 1);
+    const durationSource = Number.isFinite(Number(durationOverrideSec))
+      ? Number(durationOverrideSec)
+      : Number(audioRef.current?.currentTime || routineData?.durationSec || 0);
+    const durationSec = roundN(durationSource, 2);
+    const summary = {
+      sessionId: String(session?.id || ""),
+      sessionTitle: String(session?.title || "Play Session"),
+      averageScore,
+      bestScore: bestScoreValue,
+      samples,
+      durationSec,
+      grade: scoreToLetterGrade(averageScore),
+      source: "play",
+      difficulty: normalizeDifficulty(routineData?.difficulty, normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)),
+    };
+
+    setPracticeResultModal({
+      open: true,
+      summary,
+      saving: typeof onPracticeRunComplete === "function",
+      saveError: "",
+    });
+
+    setStatusMessage(reason === "stopped" ? "Play session stopped." : "Play session finished.");
+
+    if (typeof onPracticeRunComplete === "function") {
+      Promise.resolve(onPracticeRunComplete(summary))
+        .then(() => {
+          setPracticeResultModal((prev) => ({ ...prev, saving: false, saveError: "" }));
+        })
+        .catch((err) => {
+          console.error("Stats save failed:", err);
+          setPracticeResultModal((prev) => ({
+            ...prev,
+            saving: false,
+            saveError: "Could not save stats to profile. Start backend with `python app.py`.",
+          }));
+        });
+    }
   }
 
   async function downloadPackage() {
@@ -2121,6 +2776,10 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     const packageName = `${safeRoutineName(session.title)}-package.zip`;
     const routineExport = {
       ...existingRoutine,
+      difficulty: normalizeDifficulty(
+        existingRoutine?.difficulty,
+        normalizeDifficulty(session?.config?.difficulty, DEFAULT_DIFFICULTY)
+      ),
       song: {
         ...(existingRoutine.song || {}),
         offsetSec: Number(existingRoutine.song?.offsetSec) || 0,
@@ -2173,6 +2832,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
           packageZipFileName: packageName,
           requiredContents: ["routine.json", "audio/video source"],
           optionalContents: ["webcam video"],
+          difficulty: normalizeDifficulty(routineExport?.difficulty, DEFAULT_DIFFICULTY),
         },
       });
       setStatusMessage(webcamFile ? "Package downloaded with webcam video." : "Package downloaded.");
@@ -2184,22 +2844,8 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     }
   }
 
-  function startCompareFlow() {
-    if (!routineData || !Array.isArray(routineData.frames) || routineData.frames.length === 0) {
-      setStatusMessage("No routine frames found for compare.");
-      return;
-    }
-    if (!audioRef.current || !audioUrl) {
-      setStatusMessage("No audio file found for this play session.");
-      return;
-    }
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
-    if (referenceVideoRef.current) {
-      referenceVideoRef.current.pause();
-      referenceVideoRef.current.currentTime = 0;
-    }
-    resetScoring();
+  function startComparePlayback() {
+    if (!audioRef.current) return;
     audioRef.current
       .play()
       .then(() => {
@@ -2219,7 +2865,62 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       });
   }
 
+  function startCompareFlow() {
+    if (playCountdownRemaining > 0) return;
+    if (!routineData || !Array.isArray(routineData.frames) || routineData.frames.length === 0) {
+      setStatusMessage("No routine frames found for compare.");
+      return;
+    }
+    if (!audioRef.current || !audioUrl) {
+      setStatusMessage("No audio file found for this play session.");
+      return;
+    }
+
+    clearPlayCountdownTimer();
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+    if (referenceVideoRef.current) {
+      referenceVideoRef.current.pause();
+      referenceVideoRef.current.currentTime = 0;
+    }
+    practiceFinalizeLockRef.current = false;
+    setPracticeResultModal({
+      open: false,
+      summary: null,
+      saving: false,
+      saveError: "",
+    });
+    resetScoring();
+
+    const next = Math.max(1, Math.min(30, Number(localCountdown) || 3));
+    setLocalCountdown(next);
+    setPlayCountdownRemaining(next);
+    setStatusMessage(`Play starts in ${next}...`);
+
+    let remaining = next;
+    playCountdownTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearPlayCountdownTimer();
+        setPlayCountdownRemaining(0);
+        startComparePlayback();
+        return;
+      }
+      setPlayCountdownRemaining(remaining);
+    }, 1000);
+  }
+
   function stopCompareFlow() {
+    if (playCountdownRemaining > 0) {
+      clearPlayCountdownTimer();
+      setPlayCountdownRemaining(0);
+      compareActiveRef.current = false;
+      setCompareActive(false);
+      setStatusMessage("Play countdown cancelled.");
+      return;
+    }
+    const wasRunning = compareActiveRef.current;
+    const stoppedDurationSec = Number(audioRef.current?.currentTime || 0);
     compareActiveRef.current = false;
     setCompareActive(false);
     if (audioRef.current) {
@@ -2230,7 +2931,11 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       referenceVideoRef.current.pause();
       referenceVideoRef.current.currentTime = 0;
     }
-    setStatusMessage("Play session stopped.");
+    if (wasRunning) {
+      finalizePracticeRun("stopped", stoppedDurationSec);
+    } else {
+      setStatusMessage("Play session stopped.");
+    }
   }
 
   function togglePlayLayout() {
@@ -2250,6 +2955,10 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
     forcePlayUi ||
     (session.mode === "record" && Boolean(routineData || sessionFiles?.generatedRoutine || sessionFiles?.loadedRoutine));
   const isRecordUiMode = session.mode === "record" && !isPlayUiMode;
+  const activeDifficulty = normalizeDifficulty(
+    routineData?.difficulty,
+    normalizeDifficulty(session?.config?.difficulty, localDifficulty)
+  );
   const hasReferenceWebcamVideo = Boolean(sessionFiles?.recordedWebcamFile || sessionFiles?.loadWebcamVideoFile);
   const canUseSideBySide = hasReferenceWebcamVideo && Boolean(referenceVideoUrl);
   const isSideBySidePlay = isPlayUiMode && playLayout === "side-by-side" && !!referenceVideoUrl;
@@ -2282,16 +2991,6 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
       </header>
 
       <section className="studio-wrap">
-        <div className="studio-steps">
-          <div className={isRecordUiMode ? "step-chip active" : "step-chip"}>1. Setup</div>
-          <div className={isRecordUiMode && phase !== "idle" ? "step-chip active" : "step-chip"}>
-            {isRecordUiMode ? "2. Record" : "2. Load"}
-          </div>
-          <div className={session.status === "completed" || session.status === "ready" ? "step-chip active" : "step-chip"}>
-            3. Share / Play
-          </div>
-        </div>
-
         <div className={studioGridClass}>
           {isPlayUiMode ? (
             <article className="studio-card">
@@ -2300,6 +2999,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                 Routine: {routineData?.name || "N/A"} | Frames: {routineData?.frames?.length || 0} | Duration:{" "}
                 {(Number(routineData?.durationSec) || 0).toFixed(2)}s
               </p>
+              <p className="meta-line">Difficulty: {difficultyLabel(activeDifficulty)}</p>
               {hasReferenceWebcamVideo && (
                 <>
                   <p className="meta-line">
@@ -2320,13 +3020,29 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                   {showPlayWebcam ? "On (Show Webcam)" : "Off (Skeleton Only)"}
                 </button>
               </div>
+              <label className="field">
+                Countdown (1-30 sec)
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={localCountdown}
+                  onChange={(e) => setLocalCountdown(e.target.value)}
+                  disabled={compareActive || playCountdownRemaining > 0}
+                />
+              </label>
               <div className="studio-actions">
-                {!compareActive && (
+                {!compareActive && playCountdownRemaining <= 0 && (
                   <button className="btn btn-primary" onClick={startCompareFlow}>
                     Start Play
                   </button>
                 )}
-                {compareActive && (
+                {playCountdownRemaining > 0 && (
+                  <button className="btn btn-danger" onClick={stopCompareFlow}>
+                    Cancel
+                  </button>
+                )}
+                {compareActive && playCountdownRemaining <= 0 && (
                   <button className="btn btn-danger" onClick={stopCompareFlow}>
                     Stop Play
                   </button>
@@ -2350,13 +3066,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                       onChange={(e) => {
                         const selected = e.target.files?.[0] || null;
                         onUpdateSessionFiles(session.id, { recordAudioFile: selected });
-                        onUpdateSession(session.id, {
-                          config: {
-                            audioFileName: selected?.name || "",
-                            includeWebcamVideo: Boolean(session.config?.includeWebcamVideo),
-                            webcamLayout: session.config?.webcamLayout || "raw",
-                          },
-                        });
+                        updateRecordSessionConfig({ audioFileName: selected?.name || "" });
                       }}
                       disabled={phase !== "idle"}
                     />
@@ -2369,15 +3079,11 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                     <input
                       type="checkbox"
                       checked={Boolean(session.config?.includeWebcamVideo)}
-                      onChange={(e) =>
-                        onUpdateSession(session.id, {
-                          config: {
-                            audioFileName: session.config?.audioFileName || sessionFiles?.recordAudioFile?.name || "",
-                            includeWebcamVideo: e.target.checked,
-                            webcamLayout: session.config?.webcamLayout || "raw",
-                          },
-                        })
-                      }
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setShowPlayWebcam(checked);
+                        updateRecordSessionConfig({ includeWebcamVideo: checked });
+                      }}
                       disabled={phase !== "idle"}
                     />
                     Include webcam video in exported package (optional)
@@ -2388,15 +3094,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                       Webcam Layout
                       <select
                         value={session.config?.webcamLayout || "raw"}
-                        onChange={(e) =>
-                          onUpdateSession(session.id, {
-                            config: {
-                              audioFileName: session.config?.audioFileName || sessionFiles?.recordAudioFile?.name || "",
-                              includeWebcamVideo: true,
-                              webcamLayout: e.target.value,
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRecordSessionConfig({ includeWebcamVideo: true, webcamLayout: e.target.value })}
                         disabled={phase !== "idle"}
                       >
                         {WEBCAM_LAYOUT_OPTIONS.map((opt) => (
@@ -2416,6 +3114,19 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                       onChange={(e) => setLocalCountdown(e.target.value)}
                       disabled={phase !== "idle"}
                     />
+                  </label>
+                  <label className="field">
+                    Difficulty
+                    <select
+                      value={localDifficulty}
+                      onChange={(e) => updateRecordSessionConfig({ difficulty: e.target.value })}
+                      disabled={phase !== "idle"}
+                    >
+                      {DIFFICULTY_OPTIONS.map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <small className="muted">Easy gives more tolerance. High expects tighter accuracy.</small>
                   </label>
 
                   <div className="studio-actions">
@@ -2494,6 +3205,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                 <video ref={videoRef} className="stage-video" autoPlay playsInline muted />
                 <canvas ref={canvasRef} className="stage-canvas" />
                 {isRecordUiMode && phase === "countdown" && <div className="count-badge center">{countdownRemaining}</div>}
+                {isPlayUiMode && playCountdownRemaining > 0 && <div className="count-badge center">{playCountdownRemaining}</div>}
                 {isRecordUiMode && phase === "recording" && <div className="rec-pill">REC {elapsedSec.toFixed(1)}s</div>}
               </div>
               {isSideBySidePlay && (
@@ -2506,19 +3218,24 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                   <div className="play-info-chip">
                     <strong>{routineData?.name || "Play Session"}</strong>
                     <small>
-                      {(Number(routineData?.durationSec) || 0).toFixed(2)}s | {routineData?.frames?.length || 0} frames
+                      {(Number(routineData?.durationSec) || 0).toFixed(2)}s | {routineData?.frames?.length || 0} frames | Difficulty: {difficultyLabel(activeDifficulty)}
                     </small>
                     <small className="score-line">
                       Score: {liveScore == null ? "--" : `${liveScore.toFixed(1)}%`} | Avg: {avgScore == null ? "--" : `${avgScore.toFixed(1)}%`} | Best: {bestScore == null ? "--" : `${bestScore.toFixed(1)}%`}
                     </small>
                   </div>
                   <div className="floating-play-dock" role="group" aria-label="Play controls">
-                    {!compareActive && (
+                    {!compareActive && playCountdownRemaining <= 0 && (
                       <button className="btn btn-primary" onClick={startCompareFlow}>
                         Start
                       </button>
                     )}
-                    {compareActive && (
+                    {playCountdownRemaining > 0 && (
+                      <button className="btn btn-danger" onClick={stopCompareFlow}>
+                        Cancel
+                      </button>
+                    )}
+                    {compareActive && playCountdownRemaining <= 0 && (
                       <button className="btn btn-danger" onClick={stopCompareFlow}>
                         Stop
                       </button>
@@ -2526,13 +3243,35 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                     <button className="btn" onClick={downloadPackage} disabled={downloadPending}>
                       {downloadPending ? "Preparing..." : "Download"}
                     </button>
+                    <label className="dock-countdown">
+                      <span>Countdown</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={localCountdown}
+                        onChange={(e) => setLocalCountdown(e.target.value)}
+                        disabled={compareActive || playCountdownRemaining > 0}
+                      />
+                    </label>
                     <span className="dock-sep" aria-hidden="true" />
                     {hasReferenceWebcamVideo && (
                       <button className="btn" onClick={togglePlayLayout} disabled={!canUseSideBySide}>
                         {playLayout === "side-by-side" ? "Overlay" : "Side By Side"}
                       </button>
                     )}
-                    <button className="btn" onClick={() => setShowPlayWebcam((v) => !v)}>
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        setShowPlayWebcam((v) => {
+                          const next = !v;
+                          if (phase === "idle") {
+                            updateRecordSessionConfig({ includeWebcamVideo: next });
+                          }
+                          return next;
+                        })
+                      }
+                    >
                       {showPlayWebcam ? "Webcam On" : "Webcam Off"}
                     </button>
                     {statusMessage && <span className="dock-sep" aria-hidden="true" />}
@@ -2548,7 +3287,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                       Audio: {sessionFiles?.recordAudioFile?.name || "Required"}
                     </small>
                     <small>
-                      Countdown: {Math.max(1, Math.min(30, Number(localCountdown) || 3))}s | View: {showPlayWebcam ? "Webcam" : "Skeleton"}
+                      Countdown: {Math.max(1, Math.min(30, Number(localCountdown) || 3))}s | Difficulty: {difficultyLabel(localDifficulty)} | View: {showPlayWebcam ? "Webcam" : "Skeleton"}
                     </small>
                   </div>
                   <div className="floating-play-dock" role="group" aria-label="Record controls">
@@ -2560,13 +3299,7 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                         onChange={(e) => {
                           const selected = e.target.files?.[0] || null;
                           onUpdateSessionFiles(session.id, { recordAudioFile: selected });
-                          onUpdateSession(session.id, {
-                            config: {
-                              audioFileName: selected?.name || "",
-                              includeWebcamVideo: Boolean(session.config?.includeWebcamVideo),
-                              webcamLayout: session.config?.webcamLayout || "raw",
-                            },
-                          });
+                          updateRecordSessionConfig({ audioFileName: selected?.name || "" });
                         }}
                         disabled={phase !== "idle"}
                       />
@@ -2574,6 +3307,18 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
                     <button className="btn" onClick={() => setShowPlayWebcam((v) => !v)}>
                       {showPlayWebcam ? "Webcam On" : "Webcam Off"}
                     </button>
+                    <label className="dock-countdown">
+                      <span>Difficulty</span>
+                      <select
+                        value={localDifficulty}
+                        onChange={(e) => updateRecordSessionConfig({ difficulty: e.target.value })}
+                        disabled={phase !== "idle"}
+                      >
+                        {DIFFICULTY_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="dock-countdown">
                       <span>Countdown</span>
                       <input
@@ -2611,7 +3356,57 @@ function StudioPage({ session, sessionFiles, onBack, onGoDashboard, onLogout, on
           </article>
         </div>
       </section >
+      {practiceResultModal.open && practiceResultModal.summary && (
+        <PracticeRunSummaryModal
+          summary={practiceResultModal.summary}
+          saving={practiceResultModal.saving}
+          saveError={practiceResultModal.saveError}
+          onClose={() =>
+            setPracticeResultModal((prev) => ({
+              ...prev,
+              open: false,
+            }))
+          }
+        />
+      )}
     </div >
+  );
+}
+
+function PracticeRunSummaryModal({ summary, saving, saveError, onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal practice-summary-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="section-head">
+          <h2>Practice Complete</h2>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+        <div className="practice-grade-row">
+          <div>
+            <p className="muted">Average Score</p>
+            <h3>{Number(summary.averageScore || 0).toFixed(1)}%</h3>
+          </div>
+          <div className="grade-badge">{summary.grade || scoreToLetterGrade(summary.averageScore)}</div>
+        </div>
+        <div className="stats-grid practice-grid">
+          <article className="stats-item">
+            <p className="muted">Best Score</p>
+            <h3>{Number(summary.bestScore || 0).toFixed(1)}%</h3>
+          </article>
+          <article className="stats-item">
+            <p className="muted">Scored Frames</p>
+            <h3>{Number(summary.samples || 0)}</h3>
+          </article>
+          <article className="stats-item">
+            <p className="muted">Duration</p>
+            <h3>{Number(summary.durationSec || 0).toFixed(2)}s</h3>
+          </article>
+        </div>
+        {saving && <p className="meta-line">Saving to your profile...</p>}
+        {!saving && !saveError && <p className="meta-line">Saved to profile and leaderboard.</p>}
+        {saveError && <p className="meta-line practice-error">{saveError}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -2635,6 +3430,9 @@ function ImportSessionModal({ draft, setDraft, onClose, onSubmit }) {
       loadZipFile: nextMode === "load-package" ? prev.loadZipFile : null,
       sourceVideoFileName: nextMode === "load-video" ? prev.sourceVideoFileName : "",
       sourceVideoFile: nextMode === "load-video" ? prev.sourceVideoFile : null,
+      sourceVideoDifficulty: nextMode === "load-video"
+        ? normalizeDifficulty(prev.sourceVideoDifficulty, DEFAULT_DIFFICULTY)
+        : DEFAULT_DIFFICULTY,
       friendShareCode: nextMode === "friend-code" ? prev.friendShareCode : "",
     }));
   }
@@ -2712,7 +3510,7 @@ function ImportSessionModal({ draft, setDraft, onClose, onSubmit }) {
             type="text"
             value={draft.title}
             onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Optional override"
+            placeholder="Name your session"
             disabled={busy}
           />
         </label>
@@ -2769,23 +3567,43 @@ function ImportSessionModal({ draft, setDraft, onClose, onSubmit }) {
         )}
 
         {draft.importMode === "load-video" && (
-          <label className="field">
-            Source Video File
-            <input
-              type="file"
-              accept="video/*"
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  sourceVideoFileName: e.target.files?.[0]?.name || "",
-                  sourceVideoFile: e.target.files?.[0] || null,
-                }))
-              }
-              disabled={busy}
-            />
-            {draft.sourceVideoFileName && <small className="muted">Selected: {draft.sourceVideoFileName}</small>}
+          <>
+            <label className="field">
+              Source Video File
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    sourceVideoFileName: e.target.files?.[0]?.name || "",
+                    sourceVideoFile: e.target.files?.[0] || null,
+                  }))
+                }
+                disabled={busy}
+              />
+              {draft.sourceVideoFileName && <small className="muted">Selected: {draft.sourceVideoFileName}</small>}
+            </label>
+            <label className="field">
+              Difficulty
+              <select
+                value={normalizeDifficulty(draft.sourceVideoDifficulty, DEFAULT_DIFFICULTY)}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    sourceVideoDifficulty: normalizeDifficulty(e.target.value, DEFAULT_DIFFICULTY),
+                  }))
+                }
+                disabled={busy}
+              >
+                {DIFFICULTY_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+              <small className="muted">Easy is more lenient. High expects tighter motion matching.</small>
+            </label>
             <small className="muted">This will extract pose frames, create a routine, include the source video, and open Play session.</small>
-          </label>
+          </>
         )}
 
         {draft.importMode === "friend-code" && (

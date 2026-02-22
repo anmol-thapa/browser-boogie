@@ -1,13 +1,26 @@
-# Environments
-.venv/
-env/
-.env
-.env.*
-
-# PyCharm specific
+# OS / editor
+.DS_Store
 .idea/
 
-# Python cache files
+# Python
+.venv/
+env/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Secrets / local env
+.env
+.env.*
+
+# Local runtime data
+data/
+
+# Node / frontend build artifacts
+node_modules/
+*/node_modules/
+dist/
+*/dist/
+.vite/
+*/.vite/
+*.tsbuildinfo
