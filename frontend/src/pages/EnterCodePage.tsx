@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import "./homepage.css";
 
 export default function EnterCodePage() {
@@ -10,9 +11,9 @@ export default function EnterCodePage() {
           </div>
           <div className="home-brand">Just Dance</div>
         </div>
-        <button type="button" className="home-login">
+        <Link to="/login" className="home-login">
           Login
-        </button>
+        </Link>
       </nav>
 
       <main className="home-main">
