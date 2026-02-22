@@ -24,10 +24,14 @@ export default function HomePage() {
     <div className="home">
       <nav className="home-nav">
         <div className="home-brand-wrap">
-          <div className="home-logo-slot" aria-hidden="true">
-            Logo
-          </div>
-          <div className="home-brand">Just Dance</div>
+          <Link to="/" className="home-logo-link" aria-label="Go to landing page">
+            <div className="home-logo-slot" aria-hidden="true">
+              Logo
+            </div>
+          </Link>
+          <Link to="/" className="home-brand-link">
+            Just Dance
+          </Link>
         </div>
         <Link to="/login" className="home-login">
           Login
