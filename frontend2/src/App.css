@@ -7,29 +7,37 @@
 }
 
 :root {
-  --bg: #f3f6fb;
-  --surface: #ffffff;
-  --surface-muted: #f7f9fc;
-  --line: #dce4ef;
-  --line-strong: #cfd9e8;
-  --text: #0f172a;
-  --text-soft: #64748b;
+  --bg: #3f2e1f;
+  --surface: #f1dcc4;
+  --surface-muted: #e8c9a4;
+  --line: #000000;
+  --line-strong: #000000;
+  --text: #000000;
+  --text-soft: #3f2e1f;
   --primary: #2563eb;
   --primary-ink: #ffffff;
   --danger: #dc2626;
   --danger-ink: #ffffff;
   --focus: #93c5fd;
   --container-max: 1220px;
-  --grad-primary: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  --grad-surface: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 16px 42px rgba(15, 23, 42, 0.12);
-  --radius-lg: 16px;
+  --grad-primary: linear-gradient(135deg, #f0c777 0%, #e0ab63 100%);
+  --grad-surface: linear-gradient(180deg, #f2dfc9 0%, #e5c6a0 100%);
+  --shadow-sm: 4px 4px 0 #000000;
+  --shadow-md: 7px 7px 0 #000000;
+  --shadow-lg: 10px 10px 0 #000000;
+  --radius-lg: 0;
+  --guide-wood-main: #c8a27a;
+  --guide-wood-panel: #dfb88d;
+  --guide-wood-surface: #f1dcc4;
+  --guide-wood-soft: #edd1b1;
+  --guide-ink-soft: #3f2e1f;
+  --guide-border-color: #000000;
+  --guide-border-width: 4px;
 }
 
 * {
   box-sizing: border-box;
+  font-family: "Mojangles", "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
 }
 
 html,
@@ -42,10 +50,7 @@ body,
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(1100px 560px at 0% -10%, rgba(59, 130, 246, 0.12), transparent 62%),
-    radial-gradient(900px 520px at 100% -20%, rgba(125, 211, 252, 0.1), transparent 58%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-family: "Mojangles", "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
 }
@@ -65,7 +70,7 @@ body {
 .app-root.app-root-play .studio-wrap {
   border: none;
   background: transparent;
-  padding: 8px 0 0;
+  padding: 0 0 0;
 }
 
 .topbar {
@@ -655,6 +660,7 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-left: 2px;
   margin-bottom: 12px;
 }
 
@@ -1243,7 +1249,7 @@ h3 {
   border-radius: 10px;
   background: var(--surface-muted);
   padding: 14px 16px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: "Mojangles", "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1358,12 +1364,20 @@ h3 {
   }
 }
 
-/* Hard-edge + bold outline treatment for remaining UI surfaces */
+/* ==========================================================================
+   Unified CSS Guide
+   1) Canvas stays black so panes read as stacked cards.
+   2) Surfaces use warm wood tones with black typography.
+   3) Borders are always thick black (4px) and corners stay sharp.
+   4) Depth comes from hard offset shadows (no soft blur-only look).
+   5) Mojangles remains the default UI typeface.
+   ========================================================================== */
 .app-root :where(
   .topbar,
   .tabs,
   .tab-link,
   .dashboard-clean,
+  .library-wrap,
   .stats-item,
   .leaderboard-list,
   .leaderboard-row,
@@ -1371,42 +1385,19 @@ h3 {
   .list-card,
   .recent-row,
   .session-card,
+  .studio-wrap,
   .studio-card,
   .studio-canvas,
   .studio-state,
+  .modal,
+  .mode-item,
   .share-code-box,
   .floating-play-dock,
   .stage-overlay,
   .play-info-chip,
   .step-chip,
-  .btn,
-  button,
-  input,
-  select,
-  textarea
-) {
-  border-radius: 0 !important;
-}
-
-.app-root :where(
-  .topbar,
-  .tab-link,
-  .dashboard-clean,
-  .stats-item,
-  .leaderboard-list,
-  .leaderboard-row,
-  .panel,
-  .list-card,
-  .recent-row,
-  .session-card,
-  .studio-card,
-  .studio-canvas,
-  .studio-state,
-  .share-code-box,
-  .floating-play-dock,
-  .stage-overlay,
-  .play-info-chip,
-  .step-chip,
+  .grade-badge,
+  .fake-stage,
   .btn,
   button,
   input,
@@ -1414,18 +1405,271 @@ h3 {
   textarea
 ) {
   border-style: solid !important;
-  border-width: 4px !important;
+  border-width: var(--guide-border-width) !important;
+  border-color: var(--guide-border-color) !important;
+  border-radius: 0 !important;
+}
+
+.topbar,
+.topbar-home,
+.quick-start-panel,
+.app-root:not(.app-root-play) .quick-start-panel {
+  background: var(--guide-wood-main) !important;
+}
+
+.tabs,
+.app-root:not(.app-root-play) .topbar-home .tabs {
+  background: var(--guide-wood-soft) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.topbar-home .tabs,
+.app-root:not(.app-root-play) .topbar-home .tabs {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.tab-link {
+  color: var(--guide-ink-soft) !important;
+  background: transparent !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.tab-link:hover,
+.app-root:not(.app-root-play) .tab-link:hover {
+  background: #fdf0df !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: var(--shadow-md) !important;
+  transform: translate(-1px, -1px);
+}
+
+.tab-link.active,
+.app-root:not(.app-root-play) .tab-link.active {
+  background: #f5dcae !important;
+  color: #000000 !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.tab-link.active:hover,
+.app-root:not(.app-root-play) .tab-link.active:hover {
+  background: #f5dcae !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.dashboard-clean:not(.quick-start-panel),
+.app-root:not(.app-root-play) .dashboard-clean:not(.quick-start-panel),
+.library-wrap,
+.app-root:not(.app-root-play) .library-wrap,
+.stats-item,
+.session-card,
+.app-root:not(.app-root-play) .session-card,
+.leaderboard-list,
+.mode-item,
+.modal,
+.share-code-box,
+.studio-wrap,
+.studio-card,
+.studio-canvas,
+.studio-state {
+  background: var(--guide-wood-surface) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-clean {
+  background: var(--guide-wood-panel) !important;
+}
+
+.leaderboard-head {
+  background: #e6c398 !important;
+  color: #000000 !important;
+}
+
+.muted,
+.meta-line,
+.mode-item small,
+.section-head .muted {
+  color: var(--guide-ink-soft) !important;
+}
+
+.btn,
+.app-root:not(.app-root-play) .btn {
+  background: #f7e7d3 !important;
+  color: #000000 !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.btn:hover,
+.app-root:not(.app-root-play) .btn:hover {
+  background: #fdf0df !important;
+  border-color: #000000 !important;
+  box-shadow: var(--shadow-md) !important;
+  transform: translate(-1px, -1px);
+}
+
+.btn-primary,
+.app-root:not(.app-root-play) .btn-primary {
+  background: #f0c777 !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.btn-primary:hover,
+.app-root:not(.app-root-play) .btn-primary:hover {
+  background: #f6d89e !important;
+  color: #000000 !important;
   border-color: #000000 !important;
 }
 
-/* Keep stats table lines thinner than the global heavy outline */
+.btn-danger {
+  background: #e49b83 !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+.btn-danger:hover {
+  background: #efb09a !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+.step-chip {
+  background: #f3ddc3 !important;
+  color: var(--guide-ink-soft) !important;
+}
+
+.step-chip.active {
+  background: #e4bd8f !important;
+  color: #000000 !important;
+}
+
+.field input,
+.field select,
+.field textarea,
+.dock-countdown input {
+  background: #fff3e3 !important;
+  color: #000000 !important;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.btn:focus {
+  outline: 3px solid #000000;
+  outline-offset: 2px;
+}
+
+.studio-wrap {
+  background: #d6af86 !important;
+}
+
+.studio-state {
+  border-top: var(--guide-border-width) solid #000000 !important;
+  color: #000000 !important;
+}
+
+.fake-stage {
+  background: #000000 !important;
+}
+
+.studio-grid.play-mode .fake-stage,
+.studio-grid.record-mode .fake-stage {
+  border-radius: 0 !important;
+}
+
+.stage-reference {
+  border-left: var(--guide-border-width) solid #000000 !important;
+}
+
+.stage-overlay {
+  background: rgba(241, 220, 196, 0.95) !important;
+  color: #000000 !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.reference-overlay {
+  background: rgba(0, 0, 0, 0.82) !important;
+  border-color: #000000 !important;
+}
+
+.play-info-chip {
+  background: rgba(0, 0, 0, 0.78) !important;
+  color: #ffffff !important;
+}
+
+.play-info-chip small {
+  color: #f4dcc0 !important;
+}
+
+.play-info-chip .score-line {
+  color: #c6ff8f !important;
+}
+
+.floating-play-dock {
+  background: #2f2011 !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.floating-play-dock .btn {
+  background: #f3dec4 !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: none !important;
+}
+
+.floating-play-dock .btn-primary {
+  background: #f0c777 !important;
+  color: #000000 !important;
+}
+
+.floating-play-dock .btn-danger {
+  background: #e49b83 !important;
+  color: #000000 !important;
+}
+
+.dock-sep {
+  background: rgba(255, 227, 194, 0.5) !important;
+}
+
+.dock-countdown {
+  color: #f7e5cf !important;
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.78) !important;
+}
+
+.modal {
+  background: var(--guide-wood-surface) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.grade-badge {
+  background: #f0c777 !important;
+  color: #000000 !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.mode-item.active {
+  background: #e8c59a !important;
+  border-color: #000000 !important;
+}
+
+.share-code-box {
+  background: #ffeecf !important;
+  color: #000000 !important;
+}
+
 .app-root .stats-clean .leaderboard-list {
-  border-width: 4px !important;
+  border-width: var(--guide-border-width) !important;
 }
 
 .app-root .stats-clean .leaderboard-row {
   border: 0 !important;
-  border-top: 4px solid #000000 !important;
+  border-top: var(--guide-border-width) solid #000000 !important;
 }
 
 .app-root .stats-clean .leaderboard-row:first-child {

@@ -49,38 +49,20 @@ export default function TopNav({ showAuthButtons = true }: TopNavProps) {
   };
 
   return (
-    <nav className="home-nav">
-      <div className="home-brand-wrap">
-        <Link to="/" className="home-logo-link" aria-label="Go to landing page">
-          <div className="home-logo-slot" aria-hidden="true">
-            Logo
+    <header className="topbar topbar-home">
+      <div className="topbar-home-inner">
+        <div className="brand-logo-text">
+          <h1>BrowserBoogie</h1>
+        </div>
+        {showAuthButtons && displayName ? (
+          <div className="topbar-home-actions">
+            <span className="muted">{displayName}</span>
+            <button type="button" className="btn" onClick={handleLogout}>
+              Log Out
+            </button>
           </div>
-        </Link>
-        <Link to="/" className="home-brand-link">
-          Just Dance
-        </Link>
+        ) : null}
       </div>
-      {showAuthButtons && !displayName ? (
-        <div className="home-auth-links">
-          <Link to="/login" className="home-login">
-            Login
-          </Link>
-          <Link to="/signup" className="home-signup">
-            Create Account
-          </Link>
-        </div>
-      ) : null}
-      {showAuthButtons && displayName ? (
-        <div className="home-user-links">
-          <span className="home-user-label">
-            <span className="home-user-icon" aria-hidden="true" />
-            <span>{displayName}</span>
-          </span>
-          <button type="button" className="home-logout" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
-      ) : null}
-    </nav>
+    </header>
   );
 }

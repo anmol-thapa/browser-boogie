@@ -2589,16 +2589,6 @@ function StudioPage({
       </header>
 
       <section className="studio-wrap">
-        <div className="studio-steps">
-          <div className={isRecordUiMode ? "step-chip active" : "step-chip"}>1. Setup</div>
-          <div className={isRecordUiMode && phase !== "idle" ? "step-chip active" : "step-chip"}>
-            {isRecordUiMode ? "2. Record" : "2. Load"}
-          </div>
-          <div className={session.status === "completed" || session.status === "ready" ? "step-chip active" : "step-chip"}>
-            3. Share / Play
-          </div>
-        </div>
-
         <div className={studioGridClass}>
           {isPlayUiMode ? (
             <article className="studio-card">
@@ -3069,7 +3059,7 @@ function ImportSessionModal({ draft, setDraft, onClose, onSubmit }) {
             type="text"
             value={draft.title}
             onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Optional override"
+            placeholder="Name your session"
             disabled={busy}
           />
         </label>
