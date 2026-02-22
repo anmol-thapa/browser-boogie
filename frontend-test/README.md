@@ -25,7 +25,7 @@ A no-build React test page for planning your product flow.
 From `JustDance/`:
 
 ```bash
-python -m http.server 8000
+python app.py
 ```
 
 Open:
@@ -33,4 +33,5 @@ Open:
 
 Notes:
 - Sessions persist in `localStorage`.
-- Studio runtime viewport is a placeholder and ready to wire to your MediaPipe camera stage.
+- File bundles now persist to `data/<folderId>/` via `/api/storage/*`.
+- If a folder is deleted manually, opening that session shows a missing-data warning.
