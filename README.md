@@ -1,13 +1,15 @@
 # BrowserBoogie
 
-Originally built for HooHacks 2026 by Anmol Thapa, Shaunak Dogra, and Ekamjot Singh.
+Live demo: https://browser-boogie.vercel.app/
+
+Originally built for WiCS Hack to the Beat 2026 @ UVA by Anmol Thapa, Shaunak Dogra, and Ekamjot Singh.
 Devpost: https://devpost.com/software/browserboogie
 
 Further developed and cleaned up for deployment by Anmol Thapa.
 
 ## What it is
 
-BrowserBoogie is a webcam-based dance scoring app that runs entirely in the browser. You record a routine using your webcam, then play it back and score yourself against it in real time. Pose detection runs client-side via MediaPipe, so no video is ever sent to a server for processing.
+BrowserBoogie lets you record dances, create practice sessions from uploaded videos, or load a friend's dance via share code. During playback it plays the audio, tracks your pose in real time via MediaPipe, compares your movement frame by frame against the reference dance, and scores your performance with difficulty-based leniency. Results are saved to your account with XP, level progression, and achievements tracked across sessions.
 
 ![BrowserBoogie screenshot](public/browser_boogie.png)
 
@@ -15,7 +17,7 @@ BrowserBoogie is a webcam-based dance scoring app that runs entirely in the brow
 
 ### Recording
 
-- Record a dance routine with your webcam against any audio file
+- Record a dance with your webcam against any audio file
 - Configurable countdown before recording starts
 - Optional webcam video capture alongside the pose skeleton data
 - Side-by-side or raw webcam layout options for the recorded video
@@ -23,19 +25,19 @@ BrowserBoogie is a webcam-based dance scoring app that runs entirely in the brow
 
 ### Playback and Scoring
 
-- Play back any routine and score yourself frame by frame against the reference skeleton
+- Play back any session and score yourself frame by frame against the reference skeleton
 - Live score and running average displayed during playback
 - Difficulty settings (Easy, Medium, Hard) with different angle tolerance and scoring windows
-- View modes: overlay (reference skeleton drawn over your live feed), skeleton on side (reference skeleton in a separate panel next to your live feed, no reference video required), side-by-side (your webcam feed next to the reference recording), or none (pure memorisation)
+- View modes: overlay (reference skeleton drawn over your live feed), skeleton on side (reference skeleton in a separate panel, no reference video required), side-by-side (your webcam feed next to the reference recording), or none (pure memorisation)
 - Configurable countdown before playback starts
 - Pause and resume mid-session; only completed playthroughs count toward stats
 - Letter grade on completion (A, B, C, D, F)
 
 ### Import
 
-- Import from video: upload any video file and the app extracts pose frames to build a playable routine
+- Import from video: upload any video file and the app extracts pose frames to build a playable session
 - Videos over 2 minutes are trimmed automatically in-browser using FFmpeg.wasm
-- Import via friend code: paste a share code to load someone else's routine directly into your library
+- Import via friend code: paste a share code to load someone else's dance directly into your library
 
 ### Library
 
@@ -59,7 +61,7 @@ BrowserBoogie is a webcam-based dance scoring app that runs entirely in the brow
 
 ### Browse
 
-- Browse public preset routines uploaded to Supabase (admin-controlled)
+- Browse public preset dances uploaded to Supabase (admin-controlled)
 - Open any preset directly into your library as a Play session
 
 ### Auth
@@ -75,7 +77,7 @@ BrowserBoogie is a webcam-based dance scoring app that runs entirely in the brow
 - MediaPipe Tasks Vision (pose landmarking, runs fully client-side via WASM)
 - Supabase (auth, Postgres, Storage)
 - FFmpeg.wasm (in-browser video trimming)
-- JSZip (routine package bundling)
+- JSZip (session package bundling)
 
 ## Setup
 
