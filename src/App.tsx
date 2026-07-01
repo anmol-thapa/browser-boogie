@@ -15,7 +15,7 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
   if (!ready) return null;
   if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/signup" replace />;
   }
   return children;
 }

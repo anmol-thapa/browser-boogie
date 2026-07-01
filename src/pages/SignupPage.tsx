@@ -52,7 +52,7 @@ export default function SignupPage() {
       <main className="home-main auth-main">
         <section className="auth-card">
           <h1 className="auth-title">Create Account</h1>
-          <p className="auth-subtitle">Join Just Dance and start your first challenge.</p>
+          <p className="auth-subtitle">Join BrowserBoogie and start your first challenge.</p>
 
           <form className="auth-form" onSubmit={handleSubmit}>
             <label className="auth-label" htmlFor="email">
