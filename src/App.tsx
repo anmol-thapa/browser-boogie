@@ -37,8 +37,8 @@ function RequireGuest({ children }: { children: JSX.Element }) {
 function StudioRoute() {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await clearSession();
     navigate("/login", { replace: true });
   };
 
